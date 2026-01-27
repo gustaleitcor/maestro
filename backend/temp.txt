@@ -1,0 +1,46 @@
+	conn, err := bindings.NewConnectionWithOptions(context.Background(), bindings.Options{
+		URI: "unix:///run/user/1000/podman/podman.sock",
+	})
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	newImage, err := images.BuildFromServerContext(conn, []string{}, images.BuildOptions{
+		ContainerFiles: []string{},
+		BuildOptions: define.BuildOptions{
+			ContextDirectory: "/home/gus/code/maestro/backend",
+		},
+	})
+	if err != nil {
+		fmt.Println("Error:", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("report: %v\n", newImage)
+
+	newContainer, err := containers.CreateWithSpec(conn, &specgen.SpecGenerator{
+		ContainerBasicConfig: specgen.ContainerBasicConfig{
+			Name:        fmt.Sprintf("container-%s", time.Now().Format("20060102-150405")),
+			Remove:      func(b bool) *bool { return &b }(true),
+			RemoveImage: func(b bool) *bool { return &b }(true),
+		},
+		ContainerStorageConfig: specgen.ContainerStorageConfig{
+			Image: newImage.ID,
+		},
+		ContainerHealthCheckConfig: specgen.ContainerHealthCheckConfig{
+			HealthLogDestination: "/tmp",
+		},
+	}, nil)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("response: %v\n", newContainer)
+
+	err = containers.Start(conn, newContainer.ID, nil)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
