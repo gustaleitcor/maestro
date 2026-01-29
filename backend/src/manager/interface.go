@@ -5,6 +5,7 @@ import (
 	"io"
 	"sync"
 	"time"
+
 	"golang.org/x/crypto/ssh"
 )
 
@@ -55,7 +56,7 @@ type ImageManager struct {
 
 type ConnectionManager struct {
 	Conn       context.Context    `json:"-"`
-	SshConn    *ssh.Client      `json:"-"`
+	SshConn    *ssh.Client        `json:"-"`
 	Server     ServerInfo         `json:"server"`
 	ImageQueue chan *ImageManager `json:"-"`
 

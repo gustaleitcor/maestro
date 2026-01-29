@@ -10,6 +10,14 @@ import (
 	"github.com/containers/podman/v6/pkg/domain/entities/types"
 )
 
+func (cm *ConnectionManager) MarshalJSON() ([]byte, error) {
+	cm.Mu.RLock()
+	defer cm.Mu.RUnlock()
+
+	type alias ConnectionManager
+	return json.Marshal((*alias)(cm))
+}
+
 func (cm *ContainerManager) MarshalJSON() ([]byte, error) {
 	cm.Mu.RLock()
 	defer cm.Mu.RUnlock()

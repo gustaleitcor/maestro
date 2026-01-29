@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -9,20 +10,18 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"time"
-	"bytes"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/containers/podman/v6/pkg/bindings"
 	"github.com/containers/podman/v6/pkg/bindings/containers"
+	"github.com/containers/podman/v6/pkg/bindings/system"
 	"github.com/containers/podman/v6/pkg/specgen"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
-	"gopkg.in/yaml.v3"
-	"github.com/containers/podman/v6/pkg/bindings/system"
 	"golang.org/x/crypto/ssh"
-	
+	"gopkg.in/yaml.v3"
 
 	_ "embed"
 )
@@ -83,7 +82,7 @@ func main() {
 			log.Fatal(err)
 		}
 
-		conn, err := bindings.NewConnection(context.Background(), uri.String())
+		podmanConn, err := bindings.NewConnection(context.Background(), uri.String())
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -108,13 +107,13 @@ func main() {
 		}
 		defer sshClient.Close()
 
-		info, _ := system.Info(conn, nil)
-		// set the friendly name and prepare a connection manager
+		info, _ := system.Info(podmanConn, nil)
+
 		serverInfo.Name = serverName
-		serverInfo.MemTotal = fmt.Sprintf("%dGB", info.Host.MemTotal / 1024 / 1024 / 1024)
+		serverInfo.MemTotal = fmt.Sprintf("%.2fGiB", float32(info.Host.MemTotal)/1024/1024/1024)
 
 		connectionManager := manager.ConnectionManager{
-			Conn:       conn,
+			Conn:       podmanConn,
 			SshConn:    sshClient,
 			Server:     serverInfo,
 			ImageQueue: make(chan *manager.ImageManager),
@@ -131,7 +130,7 @@ func main() {
 				containerName := fmt.Sprintf("container-%s", time.Now().Format("20060102-150405"))
 
 				// create container with spec (image must be set)
-				newContainer, err := containers.CreateWithSpec(conn, &specgen.SpecGenerator{
+				newContainer, err := containers.CreateWithSpec(podmanConn, &specgen.SpecGenerator{
 					ContainerBasicConfig: specgen.ContainerBasicConfig{
 						Name: containerName,
 					},
@@ -191,13 +190,13 @@ func main() {
 				mem, _ := strconv.ParseFloat(raw, 64)
 
 				connectionManager.Mu.Lock()
-				connectionManager.Server.MemAvailable = fmt.Sprintf("%.2fGB", mem/1024/1024)
+				connectionManager.Server.MemAvailable = fmt.Sprintf("%.2fGiB", mem/1024/1024)
 				connectionManager.Mu.Unlock()
 
 				return true
 			})
 
-			time.Sleep(time.Minute * 3)
+			time.Sleep(time.Second * 3)
 		}
 	}()
 
