@@ -26,31 +26,31 @@ import (
 	_ "embed"
 )
 
-// Config holds embedded config values used by the service.
+// Config holds embedded configuration used at runtime.
 type Config struct {
 	InternalDir string                        `yaml:"internalDir"`
 	Servers     map[string]manager.ServerInfo `yaml:"servers"`
 }
 
-// embed the config file at build time
+// embed configuration file at build time
 //
 //go:embed config.yaml
 var rawConfigFile []byte
 
 var (
-	config         Config                 // parsed config
-	serviceManager manager.ServiceManager // global manager with image/connection stores
+	config         Config                 // parsed configuration
+	serviceManager manager.ServiceManager // global service manager (images + connections)
 )
 
 func main() {
-	// Load config from embedded YAML.
+	// Parse embedded YAML config.
 	err := yaml.Unmarshal(rawConfigFile, &config)
 	if err != nil {
 		fmt.Println("Error:", err)
 		os.Exit(1)
 	}
 
-	// Read images directory and initialize ImageManager entries for each folder.
+	// Load image directories from internal storage and register them.
 	imagesDir, err := os.ReadDir(config.InternalDir)
 	if err != nil {
 		fmt.Println("Error:", err)
@@ -73,10 +73,10 @@ func main() {
 		serviceManager.Images.Store(image.Name(), imageManager)
 	}
 
-	// Connect to each server defined in config and start a worker goroutine
-	// that listens for images to run on that server.
+	// For each server in config: create a Podman connection and a worker
+	// goroutine that runs containers queued for that server.
 	for serverName, serverInfo := range config.Servers {
-		// ssh://HOST@localhost/run/user/1000/podman/podman.sock
+		// Build SSH URI to Podman socket: ssh://user@host/path/to/socket
 		uri, err := url.ParseRequestURI(fmt.Sprintf("ssh://%s@%s%s", serverInfo.Username, serverInfo.Host, serverInfo.PodmanSocket))
 		if err != nil {
 			log.Fatal(err)
@@ -121,47 +121,80 @@ func main() {
 
 		serviceManager.Connections.Store(serverName, &connectionManager)
 
-		// Worker: create and start containers for queued images.
+		// Worker: consume image jobs and create/start containers on this server.
 		go func() {
 			for imageManager := range connectionManager.ImageQueue {
-				imageManager.Mu.Lock()
+				func() {
+					imageManager.Mu.Lock()
+					defer imageManager.Mu.Unlock()
 
-				// generate a unique container name
-				containerName := fmt.Sprintf("container-%s", time.Now().Format("20060102-150405"))
+					dateTime := time.Now().Format("02-01-2006_15-04-05")
+					containerName := fmt.Sprintf("container-%s", dateTime)
 
-				// create container with spec (image must be set)
-				newContainer, err := containers.CreateWithSpec(podmanConn, &specgen.SpecGenerator{
-					ContainerBasicConfig: specgen.ContainerBasicConfig{
-						Name: containerName,
-					},
-					ContainerStorageConfig: specgen.ContainerStorageConfig{
-						Image: *imageManager.ID,
-					},
-					ContainerHealthCheckConfig: specgen.ContainerHealthCheckConfig{
-						HealthLogDestination: "/tmp",
-					},
-				}, nil)
-				if err != nil {
-					// fatal-ish: creation failed
-					fmt.Println(err)
-					os.Exit(1)
-				}
+					// Create container using the built image reference.
+					newContainer, err := containers.CreateWithSpec(podmanConn, &specgen.SpecGenerator{
+						ContainerBasicConfig: specgen.ContainerBasicConfig{
+							Name: containerName,
+						},
+						ContainerStorageConfig: specgen.ContainerStorageConfig{
+							Image: *imageManager.ID,
+						},
+						ContainerHealthCheckConfig: specgen.ContainerHealthCheckConfig{
+							HealthLogDestination: "/tmp",
+						},
+					}, nil)
+					if err != nil {
+						// Creation failed
+						log.Printf("Error creating container %s for image %s: %v", containerName, imageManager.Name, err)
+						imageManager.Container.Status = manager.Error
+						return
+					}
 
-				// track container metadata on the image manager
-				imageManager.Container = &manager.ContainerManager{
-					ID:        newContainer.ID,
-					Name:      containerName,
-					Status:    manager.Running,
-					CreatedAt: time.Now(),
-				}
+					// Prepare stdout/stderr files in the image's directory.
+					stdoutFileName := fmt.Sprintf("stdout-%s.log", dateTime)
+					stderrFileName := fmt.Sprintf("stderr-%s.log", dateTime)
+					stdoutPath := filepath.Join(imageManager.FilesDir, stdoutFileName)
+					stderrPath := filepath.Join(imageManager.FilesDir, stderrFileName)
 
-				// attempt to start the container; mark error state if start fails
-				err = containers.Start(connectionManager.Conn, imageManager.Container.ID, nil)
-				if err != nil {
-					imageManager.Container.Status = manager.Error
-				}
+					stdoutFD, err := os.OpenFile(stdoutPath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0600)
+					if err != nil {
+						log.Printf("Error opening stdout file: %v", err)
+					}
 
-				imageManager.Mu.Unlock()
+					stderrFD, err := os.OpenFile(stderrPath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0600)
+					if err != nil {
+						log.Printf("Error opening stderr file: %v", err)
+					}
+
+					// Track container metadata on the image manager.
+					imageManager.Container = &manager.ContainerManager{
+						ID:        newContainer.ID,
+						Name:      containerName,
+						Status:    manager.Running,
+						CreatedAt: time.Now(),
+
+						Stdout: stdoutFD,
+						Stderr: stderrFD,
+					}
+
+					// Start the container and update status on failure.
+					err = containers.Start(connectionManager.Conn, imageManager.Container.ID, nil)
+					if err != nil {
+						imageManager.Container.Status = manager.Error
+						return
+					}
+
+					// Attach to container streams to capture logs.
+					err = containers.Attach(connectionManager.Conn, imageManager.Container.ID, nil, stdoutFD, stderrFD, nil, &containers.AttachOptions{
+						Logs:   func(a bool) *bool { return &a }(true),
+						Stream: func(a bool) *bool { return &a }(true),
+					})
+					if err != nil {
+						log.Printf("Error attaching to container %s: %v", imageManager.Container.ID, err)
+						imageManager.Container.Status = manager.Error
+						return
+					}
+				}()
 			}
 		}()
 	}
@@ -205,20 +238,22 @@ func main() {
 		for {
 			serviceManager.Images.Range(func(imageName string, imageManager *manager.ImageManager) bool {
 				imageManager.Mu.Lock()
-				if imageManager.Container != nil {
-					// inspect container state on its connection
+				if imageManager.Container != nil && imageManager.Connection != nil {
+					// Inspect the container to get current state.
 					containerReport, err := containers.Inspect(imageManager.Connection.Conn, imageManager.Container.ID, &containers.InspectOptions{
 						Size: func(a bool) *bool { return &a }(false),
 					})
 					if err != nil {
 						log.Printf("Error inspecting container %s: %v", imageManager.Container.ID, err)
-					}
-
-					// update local status on terminal state
-					switch containerReport.State.Status {
-					case "exited":
-						imageManager.Container.FinishedAt = &containerReport.State.FinishedAt
-						imageManager.Container.Status = manager.Stopped
+					} else {
+						// Update local state if container has exited.
+						switch containerReport.State.Status {
+						case "exited":
+							imageManager.Container.FinishedAt = &containerReport.State.FinishedAt
+							imageManager.Container.Status = manager.Finished
+							imageManager.Container.Stdout.Close()
+							imageManager.Container.Stderr.Close()
+						}
 					}
 				}
 				imageManager.Mu.Unlock()
@@ -231,10 +266,10 @@ func main() {
 
 	log.Println("Starting server...")
 
-	// Run Gin in release mode (production).
+	// Run Gin in release mode.
 	gin.SetMode(gin.ReleaseMode)
 
-	// Initialize Gin engine with CORS and logging middleware.
+	// Initialize Gin engine and register middleware.
 	r := gin.New(func(e *gin.Engine) {
 		e.Use(cors.New(cors.Config{
 			AllowOrigins:     []string{"*"},
@@ -247,7 +282,7 @@ func main() {
 		e.Use(gin.Logger(), gin.Recovery())
 	})
 
-	// Register API endpoints for container and file management.
+	// API endpoints for images/containers and file operations.
 	r.GET("containers", handleGetContainers)
 	r.GET("servers", handleGetServers)
 
@@ -267,7 +302,7 @@ func main() {
 	const addr string = "localhost:3003"
 	log.Printf("Server started at %s", addr)
 
-	// Start the HTTP server.
+	// Start HTTP server (blocks).
 	r.Run(addr)
 
 	os.Exit(0)
@@ -291,17 +326,13 @@ func handleGetContainers(c *gin.Context) {
 func handleGetContainer(c *gin.Context) {
 	imageName := c.Param("name")
 	if len(imageName) == 0 {
-		c.JSON(400, gin.H{
-			"error": "Container name is required",
-		})
+		c.JSON(400, gin.H{"error": "Container name is required"})
 		return
 	}
 
 	imageManager, exists := serviceManager.Images.Load(imageName)
 	if !exists {
-		c.JSON(404, gin.H{
-			"error": fmt.Sprintf("Container %s not found", imageName),
-		})
+		c.JSON(404, gin.H{"error": fmt.Sprintf("Container %s not found", imageName)})
 		return
 	}
 
@@ -312,17 +343,13 @@ func handleGetContainer(c *gin.Context) {
 func handleNewContainer(c *gin.Context) {
 	imageName := c.Param("name")
 	if len(imageName) == 0 {
-		c.JSON(400, gin.H{
-			"error": "Container name is required",
-		})
+		c.JSON(400, gin.H{"error": "Container name is required"})
 		return
 	}
 
 	imageFilesDir := filepath.Join(config.InternalDir, imageName)
 	if filepath.Dir(imageFilesDir) != config.InternalDir {
-		c.JSON(400, gin.H{
-			"error": fmt.Sprintf("Invalid container name: %s", filepath.Base(imageFilesDir)),
-		})
+		c.JSON(400, gin.H{"error": fmt.Sprintf("Invalid container name: %s", filepath.Base(imageFilesDir))})
 		return
 	}
 
@@ -330,14 +357,10 @@ func handleNewContainer(c *gin.Context) {
 	err := os.Mkdir(imageFilesDir, 0755)
 	if err != nil {
 		if errors.Is(err, os.ErrExist) {
-			c.JSON(409, gin.H{
-				"error": fmt.Sprintf("Container %s already exists", imageName),
-			})
+			c.JSON(409, gin.H{"error": fmt.Sprintf("Container %s already exists", imageName)})
 			return
 		} else {
-			c.JSON(500, gin.H{
-				"error": fmt.Sprintf("Failed to create container: %v", err),
-			})
+			c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to create container: %v", err)})
 			return
 		}
 	}
@@ -350,26 +373,20 @@ func handleNewContainer(c *gin.Context) {
 		Container: nil,
 	})
 
-	c.JSON(201, gin.H{
-		"message": fmt.Sprintf("New container %s created", imageName),
-	})
+	c.JSON(201, gin.H{"message": fmt.Sprintf("New container %s created", imageName)})
 }
 
 // handleDeleteContainer removes image files and unregisters the image.
 func handleDeleteContainer(c *gin.Context) {
 	imageName := c.Param("name")
 	if len(imageName) == 0 {
-		c.JSON(400, gin.H{
-			"error": "Container name is required",
-		})
+		c.JSON(400, gin.H{"error": "Container name is required"})
 		return
 	}
 
 	image, exists := serviceManager.Images.Load(imageName)
 	if !exists {
-		c.JSON(404, gin.H{
-			"error": fmt.Sprintf("Container %s not found", imageName),
-		})
+		c.JSON(404, gin.H{"error": fmt.Sprintf("Container %s not found", imageName)})
 		return
 	}
 
@@ -378,15 +395,11 @@ func handleDeleteContainer(c *gin.Context) {
 	// delete files on disk
 	err := os.RemoveAll(image.FilesDir)
 	if err != nil {
-		c.JSON(500, gin.H{
-			"error": fmt.Sprintf("Failed to delete container: %v", err),
-		})
+		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to delete container: %v", err)})
 		return
 	}
 
-	c.JSON(200, gin.H{
-		"message": fmt.Sprintf("Container %s deleted successfully", imageName),
-	})
+	c.JSON(200, gin.H{"message": fmt.Sprintf("Container %s deleted successfully", imageName)})
 }
 
 // handlePostFile accepts multipart file uploads for an image.
@@ -395,25 +408,19 @@ func handlePostFile(c *gin.Context) {
 
 	imageManager, exists := serviceManager.Images.Load(name)
 	if !exists {
-		c.JSON(404, gin.H{
-			"error": fmt.Sprintf("Container %s not found", name),
-		})
+		c.JSON(404, gin.H{"error": fmt.Sprintf("Container %s not found", name)})
 		return
 	}
 
 	form, err := c.MultipartForm()
 	if err != nil {
-		c.JSON(500, gin.H{
-			"error": fmt.Sprintf("Failed to parse multipart form: %v", err),
-		})
+		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to parse multipart form: %v", err)})
 		return
 	}
 
 	files := form.File["files"]
 	if len(files) == 0 {
-		c.JSON(400, gin.H{
-			"error": "No file uploaded",
-		})
+		c.JSON(400, gin.H{"error": "No file uploaded"})
 		return
 	}
 
@@ -424,18 +431,14 @@ func handlePostFile(c *gin.Context) {
 	for _, file := range files {
 		filePath := filepath.Join(imageManager.FilesDir, file.Filename)
 		if filepath.Dir(filePath) != imageManager.FilesDir {
-			c.JSON(400, gin.H{
-				"error": fmt.Sprintf("Invalid file path for uploaded file: %v", file.Filename),
-			})
+			c.JSON(400, gin.H{"error": fmt.Sprintf("Invalid file path for uploaded file: %v", file.Filename)})
 			return
 		}
 
 		c.SaveUploadedFile(file, filePath)
 	}
 
-	c.JSON(200, gin.H{
-		"message": fmt.Sprintf("Files uploaded for image %s", name),
-	})
+	c.JSON(200, gin.H{"message": fmt.Sprintf("Files uploaded for image %s", name)})
 }
 
 // handleGetFiles lists non-directory files in an image's directory.
@@ -444,17 +447,13 @@ func handleGetFiles(c *gin.Context) {
 
 	imageManager, exists := serviceManager.Images.Load(name)
 	if !exists {
-		c.JSON(404, gin.H{
-			"error": fmt.Sprintf("Image %s not found", name),
-		})
+		c.JSON(404, gin.H{"error": fmt.Sprintf("Image %s not found", name)})
 		return
 	}
 
 	entries, err := os.ReadDir(imageManager.FilesDir)
 	if err != nil {
-		c.JSON(500, gin.H{
-			"error": fmt.Sprintf("Failed to read files: %v", imageManager.Name),
-		})
+		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to read files: %v", imageManager.Name)})
 		return
 	}
 
@@ -476,25 +475,19 @@ func handleGetFile(c *gin.Context) {
 
 	imageManager, exists := serviceManager.Images.Load(name)
 	if !exists {
-		c.JSON(404, gin.H{
-			"error": fmt.Sprintf("Image %s not found", name),
-		})
+		c.JSON(404, gin.H{"error": fmt.Sprintf("Image %s not found", name)})
 		return
 	}
 
 	filePath := filepath.Join(imageManager.FilesDir, fileName)
 	if filepath.Dir(filePath) != imageManager.FilesDir {
-		c.JSON(400, gin.H{
-			"error": fmt.Sprintf("Invalid file path for file: %s", fileName),
-		})
+		c.JSON(400, gin.H{"error": fmt.Sprintf("Invalid file path for file: %s", fileName)})
 		return
 	}
 
 	file, err := os.Open(filePath)
 	if err != nil {
-		c.JSON(500, gin.H{
-			"error": fmt.Sprintf("Failed to open file: %v", fileName),
-		})
+		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to open file: %v", fileName)})
 		return
 	}
 	defer file.Close()
@@ -509,50 +502,38 @@ func handleDeleteFile(c *gin.Context) {
 
 	imageManager, exists := serviceManager.Images.Load(name)
 	if !exists {
-		c.JSON(404, gin.H{
-			"error": fmt.Sprintf("Container %s not found", name),
-		})
+		c.JSON(404, gin.H{"error": fmt.Sprintf("Container %s not found", name)})
 		return
 	}
 
 	filePath := filepath.Join(imageManager.FilesDir, fileName)
 	if filepath.Dir(filePath) != imageManager.FilesDir {
-		c.JSON(400, gin.H{
-			"error": fmt.Sprintf("Invalid file path for file: %s", fileName),
-		})
+		c.JSON(400, gin.H{"error": fmt.Sprintf("Invalid file path for file: %s", fileName)})
 		return
 	}
 
 	err := os.Remove(filePath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			c.JSON(404, gin.H{
-				"error": fmt.Sprintf("File %s does not exist for image %s", fileName, name),
-			})
+			c.JSON(404, gin.H{"error": fmt.Sprintf("File %s does not exist for image %s", fileName, name)})
 			return
 		} else {
-			c.JSON(500, gin.H{
-				"error": fmt.Sprintf("Failed to delete file: %v", err),
-			})
+			c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to delete file: %v", err)})
 			return
 		}
 	}
 
-	c.JSON(200, gin.H{
-		"message": fmt.Sprintf("File %s deleted for image %s", fileName, name),
-	})
+	c.JSON(200, gin.H{"message": fmt.Sprintf("File %s deleted for image %s", fileName, name)})
 }
 
-// handleRunContainer ensures an image is built on the requested server and queues it to run.
+// handleRunContainer ensures image is built on the requested server and queues it to run.
 func handleRunContainer(c *gin.Context) {
 	name := c.Param("name")
 	serverName := c.Query("serverName")
 
 	imageManager, exists := serviceManager.Images.Load(name)
 	if !exists {
-		c.JSON(404, gin.H{
-			"error": fmt.Sprintf("Image %s not found", name),
-		})
+		c.JSON(404, gin.H{"error": fmt.Sprintf("Image %s not found", name)})
 		return
 	}
 
@@ -561,17 +542,13 @@ func handleRunContainer(c *gin.Context) {
 
 	// prevent duplicate running containers for the same image
 	if imageManager.Container != nil && imageManager.Container.Status == manager.Running {
-		c.JSON(409, gin.H{
-			"error": fmt.Sprintf("A container for image %s is already running. Please stop the existing container before starting a new one.", name),
-		})
+		c.JSON(409, gin.H{"error": fmt.Sprintf("A container for image %s is already running. Please stop the existing container before starting a new one.", name)})
 		return
 	}
 
 	connectionManager, exists := serviceManager.Connections.Load(serverName)
 	if !exists {
-		c.JSON(404, gin.H{
-			"error": fmt.Sprintf("Server %s not found", serverName),
-		})
+		c.JSON(404, gin.H{"error": fmt.Sprintf("Server %s not found", serverName)})
 		return
 	}
 
@@ -580,9 +557,7 @@ func handleRunContainer(c *gin.Context) {
 		imageManager.Mu.RUnlock()
 		err := imageManager.Build(connectionManager)
 		if err != nil {
-			c.JSON(500, gin.H{
-				"error": fmt.Sprintf("Failed to build image %s on server %s: %v", name, serverName, err),
-			})
+			c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to build image %s on server %s: %v", name, serverName, err)})
 			return
 		}
 		imageManager.Mu.RLock()
@@ -590,9 +565,7 @@ func handleRunContainer(c *gin.Context) {
 
 	connectionManager.ImageQueue <- imageManager
 
-	c.JSON(200, gin.H{
-		"message": fmt.Sprintf("Container for image %s started successfully on server %s", name, serverName),
-	})
+	c.JSON(200, gin.H{"message": fmt.Sprintf("Container for image %s started successfully on server %s", name, serverName)})
 }
 
 // handleBuildContainer forces rebuild of an image on the specified server.
@@ -602,31 +575,23 @@ func handleBuildContainer(c *gin.Context) {
 
 	imageManager, exists := serviceManager.Images.Load(name)
 	if !exists {
-		c.JSON(404, gin.H{
-			"error": fmt.Sprintf("Image %s not found", name),
-		})
+		c.JSON(404, gin.H{"error": fmt.Sprintf("Image %s not found", name)})
 		return
 	}
 
 	connectionManager, exists := serviceManager.Connections.Load(serverName)
 	if !exists {
-		c.JSON(404, gin.H{
-			"error": fmt.Sprintf("Server %s not found", serverName),
-		})
+		c.JSON(404, gin.H{"error": fmt.Sprintf("Server %s not found", serverName)})
 		return
 	}
 
 	err := imageManager.Build(connectionManager)
 	if err != nil {
-		c.JSON(500, gin.H{
-			"error": fmt.Sprintf("Failed to build image %s on server %s: %v", name, serverName, err),
-		})
+		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to build image %s on server %s: %v", name, serverName, err)})
 		return
 	}
 
-	c.JSON(201, gin.H{
-		"message": fmt.Sprintf("Image %s built successfully on server %s", name, serverName),
-	})
+	c.JSON(201, gin.H{"message": fmt.Sprintf("Image %s built successfully on server %s", name, serverName)})
 }
 
 // handleStopContainer stops a running container and clears tracking.
@@ -635,9 +600,7 @@ func handleStopContainer(c *gin.Context) {
 
 	imageManager, exists := serviceManager.Images.Load(name)
 	if !exists {
-		c.JSON(404, gin.H{
-			"error": fmt.Sprintf("Image %s not found", name),
-		})
+		c.JSON(404, gin.H{"error": fmt.Sprintf("Image %s not found", name)})
 		return
 	}
 
@@ -646,9 +609,7 @@ func handleStopContainer(c *gin.Context) {
 
 	// nothing to do if no container/connection
 	if imageManager.Connection == nil || imageManager.Container == nil {
-		c.JSON(200, gin.H{
-			"message": fmt.Sprintf("Container for image %s stopped successfully", name),
-		})
+		c.JSON(200, gin.H{"message": fmt.Sprintf("Container for image %s stopped successfully", name)})
 		return
 	}
 
@@ -661,13 +622,9 @@ func handleStopContainer(c *gin.Context) {
 	})
 
 	if err != nil {
-		c.JSON(500, gin.H{
-			"error": fmt.Sprintf("Failed to stop container: %v", err),
-		})
+		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to stop container: %v", err)})
 		return
 	}
 
-	c.JSON(200, gin.H{
-		"message": fmt.Sprintf("Container for image %s stopped successfully", name),
-	})
+	c.JSON(200, gin.H{"message": fmt.Sprintf("Container for image %s stopped successfully", name)})
 }
