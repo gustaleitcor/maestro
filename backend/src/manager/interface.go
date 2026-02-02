@@ -3,6 +3,7 @@ package manager
 import (
 	"context"
 	"io"
+	"os"
 	"sync"
 	"time"
 )
@@ -10,10 +11,11 @@ import (
 type Status string
 
 const (
-	Running Status = "running"
-	Stopped Status = "stopped"
-	Waiting Status = "waiting"
-	Error   Status = "error"
+	Running  Status = "running"
+	Finished Status = "Finished"
+	Stopped  Status = "stopped"
+	Waiting  Status = "waiting"
+	Error    Status = "error"
 )
 
 type ServerInfo = struct {
@@ -33,8 +35,8 @@ type ContainerManager struct {
 	FinishedAt *time.Time `json:"finished_at"`
 
 	Stdin  io.Reader `json:"-"`
-	Stdout io.Writer `json:"-"`
-	Stderr io.Writer `json:"-"`
+	Stdout *os.File  `json:"-"`
+	Stderr *os.File  `json:"-"`
 
 	Mu sync.RWMutex `json:"-"`
 }
