@@ -5,6 +5,8 @@ import (
 	"io"
 	"sync"
 	"time"
+
+	"golang.org/x/crypto/ssh"
 )
 
 type Status string
@@ -21,8 +23,11 @@ type ServerInfo = struct {
 	Username     string `yaml:"username" json:"-"`
 	Host         string `yaml:"host" json:"-"`
 	PodmanSocket string `yaml:"podmanSocket" json:"-"`
+	SshClient    string `yaml:"sshClient" json:"-"`
 	IdentityFile string `yaml:"identityFile" json:"-"`
 	RemoteDir    string `yaml:"remoteDir" json:"-"`
+	MemTotal     string `json:"memTotal"`
+	MemAvailable string `json:"memAvailable"`
 }
 
 type ContainerManager struct {
@@ -51,6 +56,7 @@ type ImageManager struct {
 
 type ConnectionManager struct {
 	Conn       context.Context    `json:"-"`
+	SshConn    *ssh.Client        `json:"-"`
 	Server     ServerInfo         `json:"server"`
 	ImageQueue chan *ImageManager `json:"-"`
 

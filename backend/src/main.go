@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -9,13 +10,17 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/containers/podman/v6/pkg/bindings"
 	"github.com/containers/podman/v6/pkg/bindings/containers"
+	"github.com/containers/podman/v6/pkg/bindings/system"
 	"github.com/containers/podman/v6/pkg/specgen"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"golang.org/x/crypto/ssh"
 	"gopkg.in/yaml.v3"
 
 	_ "embed"
@@ -77,16 +82,39 @@ func main() {
 			log.Fatal(err)
 		}
 
-		conn, err := bindings.NewConnection(context.Background(), uri.String())
+		podmanConn, err := bindings.NewConnection(context.Background(), uri.String())
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		// set the friendly name and prepare a connection manager
+		key, _ := os.ReadFile(serverInfo.IdentityFile)
+		signer, _ := ssh.ParsePrivateKey(key)
+
+		sshConfig := &ssh.ClientConfig{
+			User: serverInfo.Username,
+			Auth: []ssh.AuthMethod{
+				ssh.PublicKeys(signer),
+			},
+			HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+			Timeout:         10 * time.Second,
+		}
+
+		// TODO: V
+		addr := serverInfo.Host + ":22"
+		sshClient, err := ssh.Dial("tcp", addr, sshConfig)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer sshClient.Close()
+
+		info, _ := system.Info(podmanConn, nil)
+
 		serverInfo.Name = serverName
+		serverInfo.MemTotal = fmt.Sprintf("%.2fGiB", float32(info.Host.MemTotal)/1024/1024/1024)
 
 		connectionManager := manager.ConnectionManager{
-			Conn:       conn,
+			Conn:       podmanConn,
+			SshConn:    sshClient,
 			Server:     serverInfo,
 			ImageQueue: make(chan *manager.ImageManager),
 		}
@@ -102,7 +130,7 @@ func main() {
 				containerName := fmt.Sprintf("container-%s", time.Now().Format("20060102-150405"))
 
 				// create container with spec (image must be set)
-				newContainer, err := containers.CreateWithSpec(conn, &specgen.SpecGenerator{
+				newContainer, err := containers.CreateWithSpec(podmanConn, &specgen.SpecGenerator{
 					ContainerBasicConfig: specgen.ContainerBasicConfig{
 						Name: containerName,
 					},
@@ -137,6 +165,40 @@ func main() {
 			}
 		}()
 	}
+
+	go func() {
+		for {
+			serviceManager.Connections.Range(func(serverName string, connectionManager *manager.ConnectionManager) bool {
+				// fetch memory info from the server
+				session, err := connectionManager.SshConn.NewSession()
+				if err != nil {
+					log.Printf("Error ssh session server %s: %v", serverName, err)
+					return true
+				}
+				defer session.Close()
+
+				var out bytes.Buffer
+				session.Stdout = &out
+
+				err = session.Run("awk '/MemAvailable/ {print $2}' /proc/meminfo")
+				if err != nil {
+					log.Printf("Error running free command on server %s: %v", serverName, err)
+					return true
+				}
+
+				raw := strings.TrimSpace(out.String())
+				mem, _ := strconv.ParseFloat(raw, 64)
+
+				connectionManager.Mu.Lock()
+				connectionManager.Server.MemAvailable = fmt.Sprintf("%.2fGiB", mem/1024/1024)
+				connectionManager.Mu.Unlock()
+
+				return true
+			})
+
+			time.Sleep(time.Second * 3)
+		}
+	}()
 
 	// Poll container states periodically to update status (finished, stopped).
 	go func() {
@@ -187,6 +249,7 @@ func main() {
 
 	// Register API endpoints for container and file management.
 	r.GET("containers", handleGetContainers)
+	r.GET("servers", handleGetServers)
 
 	r.POST("container/:name", handleNewContainer)
 	r.GET("container/:name", handleGetContainer)
@@ -208,6 +271,13 @@ func main() {
 	r.Run(addr)
 
 	os.Exit(0)
+}
+
+// handleGetContainers returns all tracked servers.
+func handleGetServers(c *gin.Context) {
+	servers := serviceManager.Connections.Pairs()
+
+	c.JSON(200, servers)
 }
 
 // handleGetContainers returns all tracked images.
