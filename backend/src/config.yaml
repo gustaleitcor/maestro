@@ -1,8 +1,9 @@
-internalDir: /home/raquel/Documentos/maestro/backend/images
+internalDir: /home/gus/code/maestro/backend/images
 servers:
   server1:
-    username: raquel
+    username: gus
     host: localhost
+    port: 22
     podmanSocket: /run/user/1000/podman/podman.sock
-    identityFile: /home/raquel/.ssh/podman_id_ed25519
-    remoteDir: /home/raquel/Documentos/maestro/backend/server1
+    identityFile: /home/gus/.ssh/podman_id_ed25519
+    remoteDir: /home/gus/code/maestro/backend/server1

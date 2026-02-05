@@ -77,7 +77,9 @@ func main() {
 	// goroutine that runs containers queued for that server.
 	for serverName, serverInfo := range config.Servers {
 		// Build SSH URI to Podman socket: ssh://user@host/path/to/socket
-		uri, err := url.ParseRequestURI(fmt.Sprintf("ssh://%s@%s%s", serverInfo.Username, serverInfo.Host, serverInfo.PodmanSocket))
+		serverURI := fmt.Sprintf("%s@%s:%d", serverInfo.Username, serverInfo.Host, serverInfo.Port)
+		log.Printf("Connecting to server %s: user=%s host=%s port=%d socket=%s uri=%s", serverName, serverInfo.Username, serverInfo.Host, serverInfo.Port, serverInfo.PodmanSocket, serverURI)
+		uri, err := url.ParseRequestURI(fmt.Sprintf("ssh://%s%s", serverURI, serverInfo.PodmanSocket))
 		if err != nil {
 			log.Fatal(err)
 		}

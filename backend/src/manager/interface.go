@@ -24,6 +24,7 @@ type ServerInfo = struct {
 	Name         string `json:"name"`
 	Username     string `yaml:"username" json:"-"`
 	Host         string `yaml:"host" json:"-"`
+	Port         int    `yaml:"port" json:"-"`
 	PodmanSocket string `yaml:"podmanSocket" json:"-"`
 	SshClient    string `yaml:"sshClient" json:"-"`
 	IdentityFile string `yaml:"identityFile" json:"-"`
