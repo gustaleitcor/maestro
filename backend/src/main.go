@@ -186,16 +186,20 @@ func main() {
 						return
 					}
 
-					// Attach to container streams to capture logs.
-					err = containers.Attach(connectionManager.Conn, imageManager.Container.ID, nil, stdoutFD, stderrFD, nil, &containers.AttachOptions{
-						Logs:   func(a bool) *bool { return &a }(true),
-						Stream: func(a bool) *bool { return &a }(true),
-					})
-					if err != nil {
-						log.Printf("Error attaching to container %s: %v", imageManager.Container.ID, err)
-						imageManager.Container.Status = manager.Error
-						return
-					}
+					// Attach to container streams to capture logs in a separate thread.
+					go func() {
+						err = containers.Attach(connectionManager.Conn, imageManager.Container.ID, nil, stdoutFD, stderrFD, nil, &containers.AttachOptions{
+							Logs:   func(a bool) *bool { return &a }(true),
+							Stream: func(a bool) *bool { return &a }(true),
+						})
+						if err != nil {
+							imageManager.Mu.Lock()
+							defer imageManager.Mu.Lock()
+							log.Printf("Error attaching to container %s: %v", imageManager.Container.ID, err)
+							imageManager.Container.Status = manager.Error
+							return
+						}
+					}()
 				}()
 			}
 		}()
@@ -240,6 +244,7 @@ func main() {
 		for {
 			serviceManager.Images.Range(func(imageName string, imageManager *manager.ImageManager) bool {
 				imageManager.Mu.Lock()
+				defer imageManager.Mu.Unlock()
 				if imageManager.Container != nil && imageManager.Connection != nil {
 					// Inspect the container to get current state.
 					containerReport, err := containers.Inspect(imageManager.Connection.Conn, imageManager.Container.ID, &containers.InspectOptions{
@@ -258,11 +263,10 @@ func main() {
 						}
 					}
 				}
-				imageManager.Mu.Unlock()
 				return true
 			})
 
-			time.Sleep(time.Second * 2)
+			time.Sleep(time.Second * 5)
 		}
 	}()
 
@@ -539,8 +543,8 @@ func handleRunContainer(c *gin.Context) {
 		return
 	}
 
-	imageManager.Mu.RLock()
-	defer imageManager.Mu.RUnlock()
+	imageManager.Mu.Lock()
+	defer imageManager.Mu.Unlock()
 
 	// prevent duplicate running containers for the same image
 	if imageManager.Container != nil && imageManager.Container.Status == manager.Running {
@@ -556,13 +560,11 @@ func handleRunContainer(c *gin.Context) {
 
 	// if image not built on the target server or not built at all, build it here
 	if imageManager.ID == nil || imageManager.Connection.Server.Name != serverName {
-		imageManager.Mu.RUnlock()
 		err := imageManager.Build(connectionManager)
 		if err != nil {
 			c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to build image %s on server %s: %v", name, serverName, err)})
 			return
 		}
-		imageManager.Mu.RLock()
 	}
 
 	connectionManager.ImageQueue <- imageManager

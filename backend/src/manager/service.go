@@ -39,9 +39,6 @@ func (im *ImageManager) ClearContainer() {
 }
 
 func (im *ImageManager) Build(mc *ConnectionManager) error {
-	im.Mu.Lock()
-	defer im.Mu.Unlock()
-
 	if im.Container != nil {
 		containers.Remove(mc.Conn, im.Container.ID, &containers.RemoveOptions{
 			Ignore:  func(a bool) *bool { return &a }(true),
