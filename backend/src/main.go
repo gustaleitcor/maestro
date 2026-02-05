@@ -84,7 +84,7 @@ func main() {
 			log.Fatal(err)
 		}
 
-		podmanConn, err := bindings.NewConnection(context.Background(), uri.String())
+		podmanConn, err := bindings.NewConnectionWithIdentity(context.Background(), uri.String(), serverInfo.IdentityFile, true)
 		if err != nil {
 			log.Fatal(err)
 		}
