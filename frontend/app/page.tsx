@@ -12,20 +12,47 @@ import {
   createContainer,
   deleteContainer,
   deleteFile,
-  fetchContainers,
-  fetchServers,
+  fetchContainerDetails,
+  fetchDashboard,
   runContainer,
+  saveContainerFileContent,
   saveDockerfile,
   stopContainer,
-  uploadFiles,
+  uploadFolderEntries,
 } from "@/lib/api";
-import { Container } from "@/lib/types";
+import { listContainerDirectories } from "@/lib/filesystem";
+import { Container, FolderUploadEntry, ServerSummary } from "@/lib/types";
 
 const STATUS_POLL_INTERVAL_MS = 5000;
+const DETAILS_POLL_INTERVAL_MS = 12000;
+
+function mergeContainerDetails(
+  previousContainers: Container[],
+  nextContainers: Container[],
+) {
+  const previousById = new Map(
+    previousContainers.map((container) => [container.id, container]),
+  );
+
+  return nextContainers.map((container) => {
+    const previousContainer = previousById.get(container.id);
+    if (!previousContainer?.detailsLoaded) {
+      return container;
+    }
+
+    return {
+      ...container,
+      dockerfile: previousContainer.dockerfile,
+      detailsLoaded: true,
+      files: previousContainer.files,
+      filesystem: previousContainer.filesystem,
+    };
+  });
+}
 
 export default function Home() {
   const [containers, setContainers] = useState<Container[]>([]);
-  const [servers, setServers] = useState<string[]>([]);
+  const [servers, setServers] = useState<ServerSummary[]>([]);
   const [selectedContainerId, setSelectedContainerId] = useState<string | null>(null);
   const [showAddContainer, setShowAddContainer] = useState(false);
   const [showAddFile, setShowAddFile] = useState(false);
@@ -33,35 +60,42 @@ export default function Home() {
   const [authMode, setAuthMode] = useState<"login" | "register" | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isMutating, setIsMutating] = useState(false);
+  const [loadingDetailsForId, setLoadingDetailsForId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const selectedContainer =
     containers.find((container) => container.id === selectedContainerId) ?? null;
+  const isLoadingDetails = selectedContainerId !== null && loadingDetailsForId === selectedContainerId;
 
-  const refreshData = async (
-    preserveSelection = true,
-    options?: { silent?: boolean },
-  ) => {
+  const refreshOverview = async (options?: {
+    preserveSelection?: boolean;
+    preferredSelectionId?: string | null;
+    silent?: boolean;
+  }) => {
+    const preserveSelection = options?.preserveSelection ?? true;
+
     if (!options?.silent) {
       setError(null);
     }
 
     try {
-      const [nextContainers, nextServers] = await Promise.all([
-        fetchContainers(),
-        fetchServers(),
-      ]);
+      const { containers: nextContainers, servers: nextServers } = await fetchDashboard();
 
-      setContainers(nextContainers);
-      setServers(nextServers.map((server) => server.name));
+      setContainers((currentContainers) =>
+        mergeContainerDetails(currentContainers, nextContainers),
+      );
+      setServers(nextServers);
 
       setSelectedContainerId((currentId) => {
-        if (!preserveSelection || !currentId) {
+        const preferredSelectionId =
+          options?.preferredSelectionId ?? (preserveSelection ? currentId : null);
+
+        if (!preferredSelectionId) {
           return nextContainers[0]?.id ?? null;
         }
 
-        return nextContainers.some((container) => container.id === currentId)
-          ? currentId
+        return nextContainers.some((container) => container.id === preferredSelectionId)
+          ? preferredSelectionId
           : nextContainers[0]?.id ?? null;
       });
     } catch (loadError) {
@@ -75,8 +109,41 @@ export default function Home() {
     }
   };
 
+  const refreshSelectedContainerDetails = async (
+    containerId: string,
+    options?: { silent?: boolean },
+  ) => {
+    if (!options?.silent) {
+      setError(null);
+    }
+
+    setLoadingDetailsForId(containerId);
+
+    try {
+      const details = await fetchContainerDetails(containerId);
+
+      setContainers((currentContainers) =>
+        currentContainers.map((container) =>
+          container.id === containerId
+            ? {
+                ...container,
+                ...details,
+                detailsLoaded: true,
+              }
+            : container,
+        ),
+      );
+    } catch (loadError) {
+      if (!options?.silent) {
+        setError(loadError instanceof Error ? loadError.message : "Failed to load container details");
+      }
+    } finally {
+      setLoadingDetailsForId((currentId) => (currentId === containerId ? null : currentId));
+    }
+  };
+
   useEffect(() => {
-    void refreshData(false);
+    void refreshOverview({ preserveSelection: false });
   }, []);
 
   useEffect(() => {
@@ -85,19 +152,68 @@ export default function Home() {
         return;
       }
 
-      void refreshData(true, { silent: true });
+      void refreshOverview({ preserveSelection: true, silent: true });
     }, STATUS_POLL_INTERVAL_MS);
 
     return () => window.clearInterval(intervalId);
   }, [isMutating]);
 
-  const withMutation = async (action: () => Promise<void>, preserveSelection = true) => {
+  useEffect(() => {
+    if (!selectedContainerId) {
+      return;
+    }
+
+    if (loadingDetailsForId === selectedContainerId) {
+      return;
+    }
+
+    const currentContainer = containers.find((container) => container.id === selectedContainerId);
+    if (currentContainer?.detailsLoaded) {
+      return;
+    }
+
+    void refreshSelectedContainerDetails(selectedContainerId);
+  }, [containers, loadingDetailsForId, selectedContainerId]);
+
+  useEffect(() => {
+    if (!selectedContainerId) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      if (isMutating || loadingDetailsForId === selectedContainerId) {
+        return;
+      }
+
+      void refreshSelectedContainerDetails(selectedContainerId, { silent: true });
+    }, DETAILS_POLL_INTERVAL_MS);
+
+    return () => window.clearInterval(intervalId);
+  }, [isMutating, loadingDetailsForId, selectedContainerId]);
+
+  const withMutation = async (
+    action: () => Promise<void>,
+    options?: {
+      preserveSelection?: boolean;
+      preferredSelectionId?: string | null;
+      refreshDetailsForId?: string | null;
+    },
+  ) => {
     setIsMutating(true);
     setError(null);
 
     try {
       await action();
-      await refreshData(preserveSelection);
+      await refreshOverview({
+        preserveSelection: options?.preserveSelection ?? true,
+        preferredSelectionId: options?.preferredSelectionId,
+      });
+
+      if (options?.refreshDetailsForId) {
+        await refreshSelectedContainerDetails(options.refreshDetailsForId, {
+          silent: true,
+        });
+      }
     } catch (mutationError) {
       setError(
         mutationError instanceof Error
@@ -119,7 +235,9 @@ export default function Home() {
   }) => {
     await withMutation(async () => {
       await createContainer(name, dockerfile);
-      setSelectedContainerId(name);
+    }, {
+      preferredSelectionId: name,
+      refreshDetailsForId: name,
     });
   };
 
@@ -131,7 +249,7 @@ export default function Home() {
           setSelectedContainerId(null);
         }
       },
-      false,
+      { preserveSelection: false },
     );
   };
 
@@ -140,34 +258,52 @@ export default function Home() {
     setShowAddFile(true);
   };
 
-  const handleAddFileSubmit = async (files: File[]) => {
+  const handleAddFileSubmit = async (entries: FolderUploadEntry[]) => {
     if (!fileContainerId) return;
 
     await withMutation(async () => {
-      await uploadFiles(
-        fileContainerId,
-        files.map((file) => ({
-          file,
-          path:
-            "webkitRelativePath" in file &&
-            typeof file.webkitRelativePath === "string" &&
-            file.webkitRelativePath.length > 0
-              ? file.webkitRelativePath
-              : file.name,
-        })),
-      );
+      await uploadFolderEntries(fileContainerId, entries);
+    }, {
+      refreshDetailsForId: fileContainerId,
+    });
+  };
+
+  const handleTreeDropUpload = async (
+    containerId: string,
+    entries: FolderUploadEntry[],
+  ) => {
+    await withMutation(async () => {
+      await uploadFolderEntries(containerId, entries);
+    }, {
+      refreshDetailsForId: containerId,
     });
   };
 
   const handleRemoveFile = (containerId: string, fileName: string) => {
     void withMutation(async () => {
       await deleteFile(containerId, fileName);
+    }, {
+      refreshDetailsForId: containerId,
     });
   };
 
   const handleUpdateDockerfile = async (containerId: string, dockerfile: string) => {
     await withMutation(async () => {
       await saveDockerfile(containerId, dockerfile);
+    }, {
+      refreshDetailsForId: containerId,
+    });
+  };
+
+  const handleSaveFile = async (
+    containerId: string,
+    filePath: string,
+    content: string,
+  ) => {
+    await withMutation(async () => {
+      await saveContainerFileContent(containerId, filePath, content);
+    }, {
+      refreshDetailsForId: containerId,
     });
   };
 
@@ -225,8 +361,11 @@ export default function Home() {
             container={selectedContainer}
             servers={servers}
             isMutating={isMutating}
+            isLoadingDetails={isLoadingDetails}
             onAddFile={handleAddFile}
             onRemoveFile={handleRemoveFile}
+            onSaveFile={handleSaveFile}
+            onUploadEntries={handleTreeDropUpload}
             onClose={() => setSelectedContainerId(null)}
             onUpdateDockerfile={handleUpdateDockerfile}
             onBuildContainer={handleBuildContainer}
@@ -245,6 +384,7 @@ export default function Home() {
       <AddFileDialog
         open={showAddFile}
         onOpenChange={setShowAddFile}
+        directories={selectedContainer ? listContainerDirectories(selectedContainer.filesystem) : [""]}
         onAdd={handleAddFileSubmit}
       />
 

@@ -12,23 +12,20 @@ export async function POST(
 ) {
   const { name } = await context.params
   const incomingForm = await request.formData()
-  const files = incomingForm.getAll("files")
-  const paths = incomingForm.getAll("paths")
+  const archive = incomingForm.get("file")
+  if (!(archive instanceof File)) {
+    return NextResponse.json(
+      { error: "A ZIP archive is required" },
+      { status: 400 },
+    )
+  }
 
   const backendForm = new FormData()
-
-  files.forEach((value, index) => {
-    if (!(value instanceof File)) {
-      return
-    }
-
-    backendForm.append("files", value, value.name)
-
-    const pathValue = paths[index]
-    if (typeof pathValue === "string") {
-      backendForm.append("paths", pathValue)
-    }
-  })
+  backendForm.append(
+    "file",
+    archive,
+    archive.name || `${name}.zip`,
+  )
 
   const response = await fetch(
     `${BACKEND_BASE_URL}/container/${encodeURIComponent(name)}/files`,

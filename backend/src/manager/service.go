@@ -3,6 +3,8 @@ package manager
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 
 	"github.com/containers/buildah/define"
 	"github.com/containers/podman/v6/pkg/bindings/containers"
@@ -38,12 +40,35 @@ func (im *ImageManager) ClearContainer() {
 	im.Container = nil
 }
 
+func (im *ImageManager) GetFile(fileName string) ([]byte, error) {
+	if !filepath.IsLocal(fileName) {
+		return nil, fmt.Errorf("invalid file path for file: %s", fileName)
+	}
+
+	filePath := filepath.Join(im.FilesDir, fileName)
+	bytes, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, err
+	}
+
+	return bytes, nil
+}
+
+func (im *ImageManager) GetDockerfile() []byte {
+	dockerfile, err := im.GetFile("Dockerfile")
+	if err != nil {
+		return []byte("")
+	}
+
+	return dockerfile
+}
+
 func (im *ImageManager) Build(mc *ConnectionManager) error {
 	if im.Container != nil {
 		containers.Remove(mc.Conn, im.Container.ID, &containers.RemoveOptions{
-			Ignore:  func(a bool) *bool { return &a }(true),
-			Volumes: func(a bool) *bool { return &a }(true),
-			Force:   func(a bool) *bool { return &a }(false),
+			Ignore:  new(true),
+			Volumes: new(true),
+			Force:   new(false),
 			Depend:  nil, // TODO: learn what this param does
 			Timeout: func(a uint) *uint { return &a }(0),
 		})
@@ -51,15 +76,15 @@ func (im *ImageManager) Build(mc *ConnectionManager) error {
 
 	if im.ID != nil {
 		images.Remove(mc.Conn, []string{*im.ID}, &images.RemoveOptions{
-			All:            func(a bool) *bool { return &a }(false),
-			Force:          func(a bool) *bool { return &a }(false),
-			Ignore:         func(a bool) *bool { return &a }(true),
-			LookupManifest: func(a bool) *bool { return &a }(false),
-			NoPrune:        func(a bool) *bool { return &a }(false),
+			All:            new(false),
+			Force:          new(false),
+			Ignore:         new(true),
+			LookupManifest: new(false),
+			NoPrune:        new(false),
 		})
 	}
 
-	buildReport, err := images.BuildFromServerContext(mc.Conn, nil, types.BuildOptions{
+	buildReport, err := images.Build(mc.Conn, nil, types.BuildOptions{
 		BuildOptions: define.BuildOptions{
 			ContextDirectory: im.FilesDir,
 		},

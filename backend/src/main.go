@@ -192,8 +192,8 @@ func main() {
 					// Attach to container streams to capture logs in a separate thread.
 					go func() {
 						err = containers.Attach(connectionManager.Conn, imageManager.Container.ID, nil, stdoutFD, stderrFD, nil, &containers.AttachOptions{
-							Logs:   func(a bool) *bool { return &a }(true),
-							Stream: func(a bool) *bool { return &a }(true),
+							Logs:   new(true),
+							Stream: new(true),
 						})
 						if err != nil {
 							imageManager.Mu.Lock()
@@ -251,7 +251,7 @@ func main() {
 				if imageManager.Container != nil && imageManager.Connection != nil {
 					// Inspect the container to get current state.
 					containerReport, err := containers.Inspect(imageManager.Connection.Conn, imageManager.Container.ID, &containers.InspectOptions{
-						Size: func(a bool) *bool { return &a }(false),
+						Size: new(false),
 					})
 					if err != nil {
 						log.Printf("Error inspecting container %s: %v", imageManager.Container.ID, err)
@@ -292,11 +292,13 @@ func main() {
 	})
 
 	// API endpoints for images/containers and file operations.
+	r.GET("dashboard", handleGetDashboard)
 	r.GET("containers", handleGetContainers)
 	r.GET("servers", handleGetServers)
 
 	r.POST("container/:name", handleNewContainer)
 	r.GET("container/:name", handleGetContainer)
+	r.GET("container/:name/details", handleGetContainerDetails)
 	r.DELETE("container/:name", handleDeleteContainer)
 
 	r.POST("container/:name/files", handlePostFile)
@@ -315,6 +317,17 @@ func main() {
 	r.Run(addr)
 
 	os.Exit(0)
+}
+
+// handleGetDashboard returns the top-level frontend overview in one roundtrip.
+func handleGetDashboard(c *gin.Context) {
+	c.JSON(200, struct {
+		Containers map[string]*manager.ImageManager      `json:"containers"`
+		Servers    map[string]*manager.ConnectionManager `json:"servers"`
+	}{
+		Containers: serviceManager.Images.Pairs(),
+		Servers:    serviceManager.Connections.Pairs(),
+	})
 }
 
 // handleGetContainers returns all tracked servers.
@@ -346,6 +359,35 @@ func handleGetContainer(c *gin.Context) {
 	}
 
 	c.JSON(200, imageManager)
+}
+
+// handleGetContainerDetails returns container filesystem metadata plus Dockerfile content.
+func handleGetContainerDetails(c *gin.Context) {
+	imageName := c.Param("name")
+	if len(imageName) == 0 {
+		c.JSON(400, gin.H{"error": "Container name is required"})
+		return
+	}
+
+	imageManager, exists := serviceManager.Images.Load(imageName)
+	if !exists {
+		c.JSON(404, gin.H{"error": fmt.Sprintf("Container %s not found", imageName)})
+		return
+	}
+
+	filesystemMap, err := filesystem.GetFolderStructure(imageManager.FilesDir)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Error getting folder structure %v", err)})
+		return
+	}
+
+	c.JSON(200, struct {
+		Filesystem map[string][]string `json:"filesystem"`
+		Dockerfile string              `json:"dockerfile"`
+	}{
+		Filesystem: filesystemMap,
+		Dockerfile: string(imageManager.GetDockerfile()),
+	})
 }
 
 // handleNewContainer creates a new image directory and registers it.
@@ -460,20 +502,10 @@ func handleGetFiles(c *gin.Context) {
 		return
 	}
 
-	entries, err := os.ReadDir(imageManager.FilesDir)
-	if err != nil {
-		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to read files: %v", imageManager.Name)})
-		return
-	}
-
-	var files []string
-	for _, entry := range entries {
-		files = append(files, entry.Name())
-	}
-
 	dirStruture, err := filesystem.GetFolderStructure(imageManager.FilesDir)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Error getting folder structure %v", err)})
+		return
 	}
 
 	c.JSON(200, dirStruture)
@@ -626,8 +658,8 @@ func handleStopContainer(c *gin.Context) {
 	defer imageManager.ClearContainer()
 
 	err := containers.Stop(imageManager.Connection.Conn, imageManager.Container.ID, &containers.StopOptions{
-		Ignore:  func(a bool) *bool { return &a }(false),
-		Timeout: func(a uint) *uint { return &a }(0),
+		Ignore:  new(false),
+		Timeout: new(uint(0)),
 	})
 
 	if err != nil {

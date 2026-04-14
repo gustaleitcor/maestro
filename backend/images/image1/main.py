@@ -2,6 +2,7 @@
 import sys
 import time
 
+# main file
 def main():
     print("Starting test application...", flush=True)
 

@@ -1,4 +1,11 @@
-import { Container, ContainerFile, ContainerStatus, ServerSummary } from "@/lib/types"
+import { buildContainerFilesystem } from "@/lib/filesystem"
+import { createZipArchive } from "@/lib/zip"
+import {
+  Container,
+  ContainerStatus,
+  FolderUploadEntry,
+  ServerSummary,
+} from "@/lib/types"
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ??
@@ -30,9 +37,18 @@ type ApiImage = {
 }
 
 type ApiResponseMap<T> = Record<string, T>
-
-function asArray<T>(value: T[] | null | undefined): T[] {
-  return Array.isArray(value) ? value : []
+type ApiFilesystem = Record<string, string[] | null | undefined>
+type UploadEntry = {
+  file: File
+  path?: string
+}
+type ApiDashboardResponse = {
+  containers: ApiResponseMap<ApiImage> | null
+  servers: ApiResponseMap<{ server: ApiServer }> | null
+}
+type ApiContainerDetailsResponse = {
+  filesystem: ApiFilesystem | null
+  dockerfile: string
 }
 
 function asRecord<T>(value: Record<string, T> | null | undefined): Record<string, T> {
@@ -61,8 +77,31 @@ function getErrorMessage(payload: unknown, fallback: string) {
   return fallback
 }
 
+function getArchiveFileName(containerName: string, entries: UploadEntry[]) {
+  const firstPath = entries[0]?.path
+  if (!firstPath) {
+    return `${containerName}.zip`
+  }
+
+  const rootSegment = firstPath.split("/")[0]
+  return `${rootSegment || containerName}.zip`
+}
+
+function getFileUrl(name: string, fileName: string) {
+  return `${API_BASE_URL}/container/${encodeURIComponent(name)}/file?f_name=${encodeURIComponent(fileName)}`
+}
+
+function getPathFileName(filePath: string) {
+  const normalizedPath = filePath.replace(/\/+$/, "")
+  const segments = normalizedPath.split("/")
+  return segments[segments.length - 1] || filePath || "file"
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, init)
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    cache: "no-store",
+    ...init,
+  })
 
   if (!response.ok) {
     let message = `${response.status} ${response.statusText}`
@@ -105,22 +144,10 @@ function mapStatus(runtime: ApiRuntime | null): ContainerStatus {
   }
 }
 
-async function fetchContainerFiles(name: string): Promise<ContainerFile[]> {
-  const fileNames = await request<string[] | null>(
-    `/container/${encodeURIComponent(name)}/files`,
-  )
-
-  return asArray(fileNames).map((fileName) => ({
-    name: fileName,
-    path: `/${name}/${fileName}`,
-    size: 0,
-  }))
-}
-
 export async function fetchContainerFileContent(name: string, fileName: string) {
-  const response = await fetch(
-    `${API_BASE_URL}/container/${encodeURIComponent(name)}/file?f_name=${encodeURIComponent(fileName)}`,
-  )
+  const response = await fetch(getFileUrl(name, fileName), {
+    cache: "no-store",
+  })
 
   if (!response.ok) {
     throw new Error(`Failed to load file ${fileName} for ${name}`)
@@ -129,49 +156,70 @@ export async function fetchContainerFileContent(name: string, fileName: string) 
   return response.text()
 }
 
-export async function fetchContainers(): Promise<Container[]> {
-  const [rawImages, rawConnections] = await Promise.all([
-    request<ApiResponseMap<ApiImage> | null>("/containers"),
-    request<ApiResponseMap<{ server: ApiServer }> | null>("/servers"),
-  ])
-  const images = asRecord(rawImages)
-  const connections = asRecord(rawConnections)
+export function getContainerFileDownloadUrl(name: string, fileName: string) {
+  return getFileUrl(name, fileName)
+}
 
-  const containers = await Promise.all(
-    Object.values(images).map(async (image) => {
-      const files = await fetchContainerFiles(image.name)
-      const dockerfile = files.some((file) => file.name === "Dockerfile")
-        ? await fetchContainerFileContent(image.name, "Dockerfile")
-        : ""
-      const serverName = image.connection?.server.name
-      const server =
-        serverName && connections[serverName]
-          ? mapServer(connections[serverName].server)
-          : image.connection?.server
-            ? mapServer(image.connection.server)
-            : null
+function mapContainerOverview(
+  image: ApiImage,
+  connections: Record<string, { server: ApiServer }>,
+): Container {
+  const serverName = image.connection?.server.name
+  const server =
+    serverName && connections[serverName]
+      ? mapServer(connections[serverName].server)
+      : image.connection?.server
+        ? mapServer(image.connection.server)
+        : null
 
-      return {
-        id: image.name,
-        name: image.name,
-        dockerfile,
-        status: mapStatus(image.container),
-        files,
-        imageId: image.id,
-        server,
-        runtime: image.container
-          ? {
-              id: image.container.id,
-              name: image.container.name,
-              createdAt: image.container.created_at,
-              finishedAt: image.container.finished_at ?? null,
-            }
-          : null,
-      } satisfies Container
-    }),
+  return {
+    id: image.name,
+    name: image.name,
+    dockerfile: "",
+    detailsLoaded: false,
+    status: mapStatus(image.container),
+    files: [],
+    filesystem: [],
+    imageId: image.id,
+    server,
+    runtime: image.container
+      ? {
+          id: image.container.id,
+          name: image.container.name,
+          createdAt: image.container.created_at,
+          finishedAt: image.container.finished_at ?? null,
+        }
+      : null,
+  }
+}
+
+export async function fetchDashboard() {
+  const payload = await request<ApiDashboardResponse>("/dashboard")
+  const images = asRecord(payload.containers)
+  const connections = asRecord(payload.servers)
+
+  const containers = Object.values(images)
+    .map((image) => mapContainerOverview(image, connections))
+    .sort((left, right) => left.name.localeCompare(right.name))
+
+  const servers = Object.values(connections)
+    .map((connection) => mapServer(connection.server))
+    .sort((left, right) => left.name.localeCompare(right.name))
+
+  return { containers, servers }
+}
+
+export async function fetchContainerDetails(name: string) {
+  const payload = await request<ApiContainerDetailsResponse>(
+    `/container/${encodeURIComponent(name)}/details`,
   )
+  const { files, filesystem } = buildContainerFilesystem(payload.filesystem)
 
-  return containers.sort((left, right) => left.name.localeCompare(right.name))
+  return {
+    dockerfile: payload.dockerfile,
+    files,
+    filesystem,
+  }
 }
 
 function mapServer(server: ApiServer): ServerSummary {
@@ -180,17 +228,6 @@ function mapServer(server: ApiServer): ServerSummary {
     memTotal: server.memTotal,
     memAvailable: server.memAvailable,
   }
-}
-
-export async function fetchServers(): Promise<ServerSummary[]> {
-  const rawConnections = await request<ApiResponseMap<{ server: ApiServer }> | null>(
-    "/servers",
-  )
-  const connections = asRecord(rawConnections)
-
-  return Object.values(connections)
-    .map((connection) => mapServer(connection.server))
-    .sort((left, right) => left.name.localeCompare(right.name))
 }
 
 export async function createContainer(name: string, dockerfile: string) {
@@ -214,13 +251,23 @@ export async function deleteContainer(name: string) {
 
 export async function uploadFiles(
   name: string,
-  entries: Array<{ file: File; path?: string }>,
+  entries: UploadEntry[],
 ) {
+  const archiveEntries = await Promise.all(
+    entries.map(async ({ file, path }) => ({
+      path: path ?? file.name,
+      data: new Uint8Array(await file.arrayBuffer()),
+      lastModified: file.lastModified || Date.now(),
+    })),
+  )
+  const archive = createZipArchive(archiveEntries)
   const formData = new FormData()
-  entries.forEach(({ file, path }) => {
-    formData.append("files", file, file.name)
-    formData.append("paths", path ?? file.name)
-  })
+  formData.append(
+    "file",
+    new File([archive], getArchiveFileName(name, entries), {
+      type: "application/zip",
+    }),
+  )
 
   const response = await fetch(
     `/api/container/${encodeURIComponent(name)}/files`,
@@ -234,10 +281,17 @@ export async function uploadFiles(
     throw new Error(
       getErrorMessage(
         await response.json().catch(() => undefined),
-        "Failed to upload file",
+        "Failed to upload archive",
       ),
     )
   }
+}
+
+export async function uploadFolderEntries(name: string, entries: FolderUploadEntry[]) {
+  return uploadFiles(
+    name,
+    entries,
+  )
 }
 
 export async function uploadFile(name: string, file: File) {
@@ -256,6 +310,15 @@ export async function deleteFile(name: string, fileName: string) {
 export async function saveDockerfile(name: string, dockerfile: string) {
   const file = new File([dockerfile], "Dockerfile", { type: "text/plain" })
   await uploadFiles(name, [{ file, path: "Dockerfile" }])
+}
+
+export async function saveContainerFileContent(
+  name: string,
+  filePath: string,
+  content: string,
+) {
+  const file = new File([content], getPathFileName(filePath), { type: "text/plain" })
+  await uploadFiles(name, [{ file, path: filePath }])
 }
 
 export async function buildContainer(name: string, serverName: string) {
