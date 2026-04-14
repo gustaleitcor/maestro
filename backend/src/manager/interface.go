@@ -20,7 +20,7 @@ const (
 	Error    Status = "error"
 )
 
-type ServerInfo = struct {
+type ServerInfo struct {
 	Name         string `json:"name"`
 	Username     string `yaml:"username" json:"-"`
 	Host         string `yaml:"host" json:"-"`

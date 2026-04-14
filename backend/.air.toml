@@ -8,7 +8,7 @@ env_file = ".env"
 bin = "./tmp/main"
 cmd = "go build -buildvcs=false -o ./tmp/main ./src"
 delay = 1000
-exclude_dir = ["assets", "tmp", "vendor", "testdata"]
+exclude_dir = ["assets", "tmp", "vendor", "testdata", "images"]
 exclude_file = []
 exclude_regex = ["_test.go"]
 exclude_unchanged = false

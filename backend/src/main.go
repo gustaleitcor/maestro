@@ -1,12 +1,15 @@
 package main
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"log"
+	"maestro/src/filesystem"
 	"maestro/src/manager"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -279,8 +282,8 @@ func main() {
 	r := gin.New(func(e *gin.Engine) {
 		e.Use(cors.New(cors.Config{
 			AllowOrigins:     []string{"*"},
-			AllowMethods:     []string{"GET", "POST", "PUT", "HEAD", "OPTIONS"},
-			AllowHeaders:     []string{"Origin", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With"},
+			AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS"},
+			AllowHeaders:     []string{"Origin", "Content-Type", "Content-Length", "Accept-Encoding", "X-CSRF-Token", "Authorization", "Accept", "Cache-Control", "X-Requested-With"},
 			AllowCredentials: true,
 			MaxAge:           12 * time.Hour,
 		}))
@@ -410,23 +413,29 @@ func handleDeleteContainer(c *gin.Context) {
 
 // handlePostFile accepts multipart file uploads for an image.
 func handlePostFile(c *gin.Context) {
-	name := c.Param("name")
+	imageName := c.Param("name")
 
-	imageManager, exists := serviceManager.Images.Load(name)
+	imageManager, exists := serviceManager.Images.Load(imageName)
 	if !exists {
-		c.JSON(404, gin.H{"error": fmt.Sprintf("Container %s not found", name)})
+		c.JSON(404, gin.H{"error": fmt.Sprintf("Container %s not found", imageName)})
 		return
 	}
 
-	form, err := c.MultipartForm()
+	formFile, err := c.FormFile("file")
 	if err != nil {
 		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to parse multipart form: %v", err)})
 		return
 	}
 
-	files := form.File["files"]
-	if len(files) == 0 {
-		c.JSON(400, gin.H{"error": "No file uploaded"})
+	file, err := formFile.Open()
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Failed to open file: %v", err)})
+		return
+	}
+
+	zipReader, err := zip.NewReader(file, formFile.Size)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to unzip file: %v", err)})
 		return
 	}
 
@@ -434,17 +443,11 @@ func handlePostFile(c *gin.Context) {
 	defer imageManager.Mu.Unlock()
 
 	// save each uploaded file into the image's directory
-	for _, file := range files {
-		filePath := filepath.Join(imageManager.FilesDir, file.Filename)
-		if filepath.Dir(filePath) != imageManager.FilesDir {
-			c.JSON(400, gin.H{"error": fmt.Sprintf("Invalid file path for uploaded file: %v", file.Filename)})
-			return
-		}
-
-		c.SaveUploadedFile(file, filePath)
+	if err = filesystem.SaveZipFile(zipReader, imageManager.FilesDir); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Failed to save files: %v", err)})
 	}
 
-	c.JSON(200, gin.H{"message": fmt.Sprintf("Files uploaded for image %s", name)})
+	c.JSON(200, gin.H{"message": fmt.Sprintf("Files uploaded for image %s", imageName)})
 }
 
 // handleGetFiles lists non-directory files in an image's directory.
@@ -465,13 +468,15 @@ func handleGetFiles(c *gin.Context) {
 
 	var files []string
 	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
 		files = append(files, entry.Name())
 	}
 
-	c.JSON(200, files)
+	dirStruture, err := filesystem.GetFolderStructure(imageManager.FilesDir)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Error getting folder structure %v", err)})
+	}
+
+	c.JSON(200, dirStruture)
 }
 
 // handleGetFile returns a single file as an attachment.
@@ -485,12 +490,12 @@ func handleGetFile(c *gin.Context) {
 		return
 	}
 
-	filePath := filepath.Join(imageManager.FilesDir, fileName)
-	if filepath.Dir(filePath) != imageManager.FilesDir {
+	if !filepath.IsLocal(fileName) {
 		c.JSON(400, gin.H{"error": fmt.Sprintf("Invalid file path for file: %s", fileName)})
 		return
 	}
 
+	filePath := filepath.Join(imageManager.FilesDir, fileName)
 	file, err := os.Open(filePath)
 	if err != nil {
 		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to open file: %v", fileName)})
@@ -508,17 +513,17 @@ func handleDeleteFile(c *gin.Context) {
 
 	imageManager, exists := serviceManager.Images.Load(name)
 	if !exists {
-		c.JSON(404, gin.H{"error": fmt.Sprintf("Container %s not found", name)})
+		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("Container %s not found", name)})
+		return
+	}
+
+	if !filepath.IsLocal(fileName) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Invalid file path for file: %s", fileName)})
 		return
 	}
 
 	filePath := filepath.Join(imageManager.FilesDir, fileName)
-	if filepath.Dir(filePath) != imageManager.FilesDir {
-		c.JSON(400, gin.H{"error": fmt.Sprintf("Invalid file path for file: %s", fileName)})
-		return
-	}
-
-	err := os.Remove(filePath)
+	err := os.RemoveAll(filePath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			c.JSON(404, gin.H{"error": fmt.Sprintf("File %s does not exist for image %s", fileName, name)})
@@ -529,7 +534,7 @@ func handleDeleteFile(c *gin.Context) {
 		}
 	}
 
-	c.JSON(200, gin.H{"message": fmt.Sprintf("File %s deleted for image %s", fileName, name)})
+	c.JSON(200, gin.H{"message": fmt.Sprintf("File %s deleted from image %s", fileName, name)})
 }
 
 // handleRunContainer ensures image is built on the requested server and queues it to run.

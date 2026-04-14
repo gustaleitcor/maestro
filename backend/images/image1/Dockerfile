@@ -1,11 +1,14 @@
-# Use official Python runtime as a parent image
-FROM python:3.9-slim
+# Use Python 3.11 slim image for smaller size
+FROM python:3.11-slim
 
-# Set the working directory in the container
+# Set working directory
 WORKDIR /app
 
-# Copy the current directory contents into the container at /app
-COPY main.py /app/
+# Copy the Python script
+COPY main.py .
 
-# Run main.py when the container launches
-CMD ["python", "main.py"]
+# Make the script executable
+RUN chmod +x main.py
+
+# Set the default command to run the script
+CMD ["python", "-u", "main.py"]
