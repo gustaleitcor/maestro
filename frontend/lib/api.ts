@@ -7,9 +7,11 @@ import {
   ServerSummary,
 } from "@/lib/types"
 
+const appBasePath = process.env.NEXT_PUBLIC_BASE_PATH?.replace(/\/$/, "") ?? ""
+
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ??
-  "/api/backend"
+  `${appBasePath}/api/backend`
 
 type ApiServer = {
   name: string
