@@ -7,8 +7,10 @@ import (
 	"path/filepath"
 )
 
+// SaveZipFile extracts local archive entries into dst and skips unsafe paths.
 func SaveZipFile(zipReader *zip.Reader, dst string) error {
 	for _, zipFile := range zipReader.File {
+		// Ignore entries that would escape the destination directory.
 		if !filepath.IsLocal(zipFile.Name) {
 			continue
 		}

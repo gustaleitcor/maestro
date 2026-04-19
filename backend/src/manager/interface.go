@@ -10,8 +10,10 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
+// Status represents the lifecycle state exposed for a managed container.
 type Status string
 
+// Container status values returned by the API.
 const (
 	Running  Status = "running"
 	Finished Status = "Finished"
@@ -20,6 +22,13 @@ const (
 	Error    Status = "error"
 )
 
+// serverResources stores host metrics
+type serverResources struct {
+	MemTotal     string `json:"memTotal"`
+	MemAvailable string `json:"memAvailable"`
+}
+
+// ServerInfo stores static connection settings plus the latest observed host metrics.
 type ServerInfo struct {
 	Name         string `json:"name"`
 	Username     string `yaml:"username" json:"-"`
@@ -29,10 +38,11 @@ type ServerInfo struct {
 	SshClient    string `yaml:"sshClient" json:"-"`
 	IdentityFile string `yaml:"identityFile" json:"-"`
 	RemoteDir    string `yaml:"remoteDir" json:"-"`
-	MemTotal     string `json:"memTotal"`
-	MemAvailable string `json:"memAvailable"`
+
+	serverResources
 }
 
+// ContainerManager tracks a single runtime container and its log sinks.
 type ContainerManager struct {
 	ID         string     `json:"id"`
 	Name       string     `json:"name"`
@@ -47,6 +57,7 @@ type ContainerManager struct {
 	Mu sync.RWMutex `json:"-"`
 }
 
+// ImageManager tracks a build context, the last built image, and the active container.
 type ImageManager struct {
 	ID         *string            `json:"id"`
 	Name       string             `json:"name"`
@@ -57,6 +68,7 @@ type ImageManager struct {
 	Mu sync.RWMutex `json:"-"`
 }
 
+// ConnectionManager wraps the remote Podman and SSH clients for one server.
 type ConnectionManager struct {
 	Conn       context.Context    `json:"-"`
 	SshConn    *ssh.Client        `json:"-"`
@@ -66,6 +78,7 @@ type ConnectionManager struct {
 	Mu sync.RWMutex `json:"-"`
 }
 
+// ServiceManager owns the in-memory registries for servers and images.
 type ServiceManager struct {
 	Connections SafeMap[string, *ConnectionManager] `json:"connections"`
 	Images      SafeMap[string, *ImageManager]      `json:"images"`

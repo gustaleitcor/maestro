@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 )
 
+// GetFolderStructure walks src and groups file names by their relative parent directory.
 func GetFolderStructure(src string) (map[string][]string, error) {
 	nodes := map[string][]string{
 		".": make([]string, 0, 4),
@@ -30,6 +31,7 @@ func GetFolderStructure(src string) (map[string][]string, error) {
 		}
 
 		if d.IsDir() {
+			// Keep empty directories in the response so the frontend can render them.
 			if _, ok := nodes[relPath]; !ok {
 				nodes[relPath] = make([]string, 0, 4)
 			}

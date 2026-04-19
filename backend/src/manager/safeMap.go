@@ -12,31 +12,35 @@ func (m *SafeMap[K, V]) Store(key K, value V) {
 	m.m.Store(key, value)
 }
 
-// Load returns the value stored in the map for a key, or nil if no value is present.
+// Load returns the stored value for key and reports whether it was present.
 func (m *SafeMap[K, V]) Load(key K) (value V, ok bool) {
 	v, ok := m.m.Load(key)
 	if !ok {
-		var zero V // Return zero value for V if not found
+		var zero V
 		return zero, false
 	}
 	return v.(V), ok
 }
 
+// Delete removes a key from the map.
 func (m *SafeMap[K, V]) Delete(key K) {
 	m.m.Delete(key)
 }
 
+// Range calls f for each key/value pair until f returns false.
 func (m *SafeMap[K, V]) Range(f func(key K, value V) bool) {
 	m.m.Range(func(key, value any) bool {
 		return f(key.(K), value.(V))
 	})
 }
 
+// Exists reports whether key is present in the map.
 func (m *SafeMap[K, V]) Exists(key K) bool {
 	_, ok := m.m.Load(key)
 	return ok
 }
 
+// Keys returns a snapshot of all keys currently stored in the map.
 func (m *SafeMap[K, V]) Keys() []K {
 	var keys []K
 	m.Range(func(key K, _ V) bool {
@@ -46,6 +50,7 @@ func (m *SafeMap[K, V]) Keys() []K {
 	return keys
 }
 
+// Values returns a snapshot of all values currently stored in the map.
 func (m *SafeMap[K, V]) Values() []V {
 	var values []V
 	m.Range(func(_ K, value V) bool {
@@ -55,6 +60,7 @@ func (m *SafeMap[K, V]) Values() []V {
 	return values
 }
 
+// Len counts how many entries are currently stored in the map.
 func (m *SafeMap[K, V]) Len() int {
 	var count int
 	m.Range(func(_ K, _ V) bool {
@@ -64,6 +70,7 @@ func (m *SafeMap[K, V]) Len() int {
 	return count
 }
 
+// Pairs returns a snapshot copy of the map contents.
 func (m *SafeMap[K, V]) Pairs() map[K]V {
 	pairs := make(map[K]V, m.Len())
 	m.Range(func(key K, value V) bool {

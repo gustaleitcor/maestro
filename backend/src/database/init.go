@@ -13,21 +13,24 @@ import (
 )
 
 var (
-	Query  *schema.Queries
+	// Query exposes the generated sqlc query helpers backed by DBConn.
+	Query *schema.Queries
+	// DBConn holds the shared SQLite connection for the process.
 	DBConn *sql.DB
+	// embedMigrations contains the SQL migration files bundled into the binary.
 	//go:embed migrations/*.sql
 	embedMigrations embed.FS
 )
 
 func init() {
-	// Load environment variables if not in docker
+	// Load environment variables when running outside the Docker image.
 	if os.Getenv("ENV") != "docker" {
 		if err := godotenv.Load(); err != nil {
 			panic(err)
 		}
 	}
 
-	// Connect to Sqlite
+	// Open the shared SQLite database connection.
 	var err error
 	db_conn, err := sql.Open("sqlite", "db.sqlite")
 
@@ -36,7 +39,7 @@ func init() {
 		panic(err)
 	}
 
-	// Run migrations
+	// Apply embedded migrations before serving requests.
 	goose.SetBaseFS(embedMigrations)
 
 	if err := goose.SetDialect("sqlite"); err != nil {
@@ -49,12 +52,12 @@ func init() {
 
 	log.Println("Migrations ran successfully")
 
-	// Check if the connection is working
+	// Verify the database connection before exposing the query handle.
 	if err := db_conn.Ping(); err != nil {
 		panic(err)
 	}
 
-	// Create the queries
+	// Create the sqlc query wrapper used by the rest of the application.
 	Query = schema.New(db_conn)
 
 	log.Println("Connected to sqlite database")
