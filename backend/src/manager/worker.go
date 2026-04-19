@@ -42,14 +42,24 @@ func SpinUpWorker(cm *ConnectionManager) {
 			}
 
 			// Prepare stdout/stderr files in the image's directory.
-			stdoutFileName := fmt.Sprintf("stdout-%s.log", dateTime)
-			stderrFileName := fmt.Sprintf("stderr-%s.log", dateTime)
+			stdoutFileName := fmt.Sprintf("stdout/%s.log", dateTime)
+			stderrFileName := fmt.Sprintf("stderr/%s.log", dateTime)
 			stdoutPath := filepath.Join(imageManager.FilesDir, stdoutFileName)
 			stderrPath := filepath.Join(imageManager.FilesDir, stderrFileName)
+
+			err = os.MkdirAll(filepath.Dir(stdoutPath), 0755)
+			if err != nil {
+				log.Printf("Error creatin stdout folder: %v", err)
+			}
 
 			stdoutFD, err := os.OpenFile(stdoutPath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0600)
 			if err != nil {
 				log.Printf("Error opening stdout file: %v", err)
+			}
+
+			err = os.MkdirAll(filepath.Dir(stderrPath), 0755)
+			if err != nil {
+				log.Printf("Error creatin stderr folder: %v", err)
 			}
 
 			stderrFD, err := os.OpenFile(stderrPath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0600)
@@ -68,16 +78,10 @@ func SpinUpWorker(cm *ConnectionManager) {
 				Stderr: stderrFD,
 			}
 
-			// Start the container and update status on failure.
-			err = containers.Start(cm.Conn, imageManager.Container.ID, nil)
-			if err != nil {
-				imageManager.Container.Status = Error
-				return
-			}
-
 			// Stream logs into per-run files without blocking the worker loop.
+			attachReady := make(chan bool)
 			go func() {
-				err = containers.Attach(cm.Conn, imageManager.Container.ID, nil, stdoutFD, stderrFD, nil, &containers.AttachOptions{
+				err = containers.Attach(cm.Conn, imageManager.Container.ID, nil, stdoutFD, stderrFD, attachReady, &containers.AttachOptions{
 					Logs:   new(true),
 					Stream: new(true),
 				})
@@ -89,6 +93,13 @@ func SpinUpWorker(cm *ConnectionManager) {
 					return
 				}
 			}()
+			// Start the container and update status on failure.
+			<-attachReady
+			err = containers.Start(cm.Conn, imageManager.Container.ID, nil)
+			if err != nil {
+				imageManager.Container.Status = Error
+				return
+			}
 		}()
 	}
 }
