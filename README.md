@@ -14,6 +14,10 @@ together at runtime.
 - `docker-compose-dev.yml` — local dev stack (`MODE=dev` bypasses real
   logsad.com auth; see `maestro-orq/internal/api.DevSession`)
 
+`orq` stays up as a server. `view` just builds `maestro-view` into
+`maestro-view/dist` and exits — Caddy is expected to serve that directory
+directly, not proxy to a container.
+
 ## Getting started
 
 ```sh

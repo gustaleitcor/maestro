@@ -15,16 +15,16 @@ services:
     ports:
       - "8081:8081"
 
-  # no live reload here (Vite bakes VITE_* in at build time) - use `npm run dev` for frontend work
+  # builds maestro-view into ./maestro-view/dist and exits - use `npm run dev` for live reload
   view:
     build:
       context: ./maestro-view
       dockerfile: Dockerfile
-      args:
-        VITE_ORQ_URL: http://localhost:8081
-        VITE_LOGIN_URL: https://logsad.com
-    ports:
-      - "8080:3000"
+    environment:
+      VITE_ORQ_URL: http://localhost:8081
+      VITE_LOGIN_URL: https://logsad.com
+    volumes:
+      - ./maestro-view/dist:/app/dist
 
 volumes:
   maestro-orq-dev-data:

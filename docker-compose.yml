@@ -15,16 +15,17 @@ services:
     ports:
       - "8081:8081"
 
+  # builds maestro-view into ./maestro-view/dist and exits; Caddy serves that
+  # directory directly, so no port/restart policy is needed here.
   view:
     build:
       context: ./maestro-view
       dockerfile: Dockerfile
-      args:
-        VITE_ORQ_URL: https://maestro.logsad.com
-        VITE_LOGIN_URL: https://logsad.com
-    restart: unless-stopped
-    ports:
-      - "8080:3000"
+    environment:
+      VITE_ORQ_URL: https://maestro.logsad.com
+      VITE_LOGIN_URL: https://logsad.com
+    volumes:
+      - ./maestro-view/dist:/app/dist
 
 volumes:
   maestro-orq-data:
