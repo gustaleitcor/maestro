@@ -1,0 +1,30 @@
+services:
+  orq:
+    build:
+      context: ./maestro-orq
+      dockerfile: Dockerfile
+      target: prod
+    restart: unless-stopped
+    volumes:
+      - maestro-orq-data:/data:Z
+    environment:
+      MODE: prod
+      MAESTRO_ORQ_ADDR: :8081
+      MAESTRO_ORQ_DB: /data/maestro-orq.db
+      ALLOWED_ORIGINS: https://maestro.logsad.com
+    ports:
+      - "8081:8081"
+
+  view:
+    build:
+      context: ./maestro-view
+      dockerfile: Dockerfile
+      args:
+        VITE_ORQ_URL: https://maestro.logsad.com
+        VITE_LOGIN_URL: https://logsad.com
+    restart: unless-stopped
+    ports:
+      - "8080:3000"
+
+volumes:
+  maestro-orq-data:

@@ -1,0 +1,9 @@
+[submodule "maestro-cli"]
+	path = maestro-cli
+	url = ../maestro-cli
+[submodule "maestro-orq"]
+	path = maestro-orq
+	url = ../maestro-orq
+[submodule "maestro-view"]
+	path = maestro-view
+	url = ../maestro-view
