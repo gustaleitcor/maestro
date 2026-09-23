@@ -8,19 +8,14 @@ services:
       - ./maestro-orq:/usr/src/app:z
       - maestro-orq-dev-data:/data:Z
     environment:
-      # MODE: dev skips real logsad.com session checks (see
-      # maestro-orq/internal/api.DevSession), so this stack works standalone
-      # without a real auth.logsad.com login.
-      MODE: dev
+      MODE: dev # skips real logsad.com session checks, see internal/api.DevSession
       MAESTRO_ORQ_ADDR: :8081
       MAESTRO_ORQ_DB: /data/maestro-orq.db
       ALLOWED_ORIGINS: http://localhost:8080
     ports:
       - "8081:8081"
 
-  # Vite bakes VITE_* into the built bundle, so there's no live reload here -
-  # for frontend iteration, run `npm run dev` in maestro-view directly. This
-  # service just gives you a full stack behind one `podman compose up`.
+  # no live reload here (Vite bakes VITE_* in at build time) - use `npm run dev` for frontend work
   view:
     build:
       context: ./maestro-view
