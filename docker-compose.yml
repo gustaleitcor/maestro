@@ -7,11 +7,14 @@ services:
     restart: unless-stopped
     volumes:
       - maestro-orq-data:/data:Z
+      - ${XDG_RUNTIME_DIR}/podman/podman.sock:/run/podman/podman.sock
     environment:
       MODE: prod
       MAESTRO_ORQ_ADDR: :8081
       MAESTRO_ORQ_DB: /data/maestro-orq.db
       ALLOWED_ORIGINS: https://maestro.logsad.com
+      PODMAN_SOCKET: unix:///run/podman/podman.sock
+      BUILD_TIMEOUT: 30m
     ports:
       - "8081:8081"
 
