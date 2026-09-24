@@ -7,11 +7,14 @@ services:
     volumes:
       - ./maestro-orq:/usr/src/app:z
       - maestro-orq-dev-data:/data:Z
+      - ${XDG_RUNTIME_DIR}/podman/podman.sock:/run/podman/podman.sock
     environment:
       MODE: dev # skips real logsad.com session checks, see internal/api.DevSession
-      MAESTRO_ORQ_ADDR: :8081
+      MAESTRO_ORQ_ADDR: :3005
       MAESTRO_ORQ_DB: /data/maestro-orq.db
       ALLOWED_ORIGINS: http://localhost:8080
+      PODMAN_SOCKET: unix:///run/podman/podman.sock
+      BUILD_TIMEOUT: 30m
     ports:
       - "8081:8081"
 
