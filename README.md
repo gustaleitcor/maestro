@@ -92,9 +92,9 @@ Forges are separate from signing in: they never log anyone in. A forge is
 only its API plus a read-only token, which the CLI stores (`maestro forge
 add`) and passes to orq per build so it can clone. Supported kinds:
 
-- `github` — github.com, or GitHub Enterprise Server with `--url`
-- `forgejo` — any Forgejo instance; also Codeberg and Gitea
-- `gitlab` — gitlab.com or self-hosted, including nested groups
+- `github` — github.com
+- `forgejo` — Codeberg by default, or any Forgejo or Gitea instance with `--url`
+- `gitlab` — gitlab.com, including nested groups
 
 orq only clones from hosts listed in `ALLOWED_FORGE_HOSTS` (default
 `github.com,codeberg.org,gitlab.com`), so it can't be pointed at hosts on its
