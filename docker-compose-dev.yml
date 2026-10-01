@@ -1,4 +1,15 @@
 services:
+  # A throwaway OpenID Connect provider so the dev stack has something to log
+  # in with: dev@example.com / password (see dev/dex.yaml).
+  dex:
+    image: ghcr.io/dexidp/dex:v2.41.1
+    command: ["dex", "serve", "/etc/dex/config.yaml"]
+    volumes:
+      - ./dev/dex.yaml:/etc/dex/config.yaml:ro,z
+    # Host networking, here and on orq, so that "localhost:5556" is the same
+    # Dex for the browser and for orq; the issuer URL has to match for both.
+    network_mode: host
+
   orq:
     build:
       context: ./maestro-orq
@@ -9,14 +20,22 @@ services:
       - maestro-orq-dev-data:/data:Z
       - ${XDG_RUNTIME_DIR}/podman/podman.sock:/run/podman/podman.sock
     environment:
-      MODE: dev # skips real logsad.com session checks, see internal/api.DevSession
-      MAESTRO_ORQ_ADDR: :3005
+      MODE: dev # swagger on localhost, and session cookies that work over plain http
+      MAESTRO_ORQ_ADDR: :8081
       MAESTRO_ORQ_DB: /data/maestro-orq.db
-      ALLOWED_ORIGINS: http://localhost:8080
+      # 8080 is the built view behind a local web server, 5173 is `npm run dev`
+      ALLOWED_ORIGINS: http://localhost:8080,http://localhost:5173
+      VIEW_URL: ${VIEW_URL:-http://localhost:8080}
       PODMAN_SOCKET: unix:///run/podman/podman.sock
       BUILD_TIMEOUT: 30m
-    ports:
-      - "8081:8081"
+      OIDC_ISSUER: http://localhost:5556/dex
+      OIDC_CLIENT_ID: maestro
+      OIDC_CLIENT_SECRET: maestro-dev-secret
+      OIDC_REDIRECT_URL: http://localhost:8081/api/auth/callback
+      OIDC_ALLOWED_ROLES: "" # Dex users carry no roles; let any of them in
+    network_mode: host
+    depends_on:
+      - dex
 
   # builds maestro-view into ./maestro-view/dist and exits - use `npm run dev` for live reload
   view:
@@ -25,7 +44,7 @@ services:
       dockerfile: Dockerfile
     environment:
       VITE_ORQ_URL: http://localhost:8081
-      VITE_LOGIN_URL: https://logsad.com
+      VITE_IDP_NAME: Dex
     volumes:
       - ./maestro-view/dist:/app/dist
 

@@ -15,6 +15,15 @@ services:
       ALLOWED_ORIGINS: https://maestro.logsad.com
       PODMAN_SOCKET: unix:///run/podman/podman.sock
       BUILD_TIMEOUT: 30m
+      VIEW_URL: https://maestro.logsad.com
+      # The one identity provider this deployment trusts; values come from .env
+      # (see .env.example). Any OpenID Connect provider works.
+      OIDC_ISSUER: ${OIDC_ISSUER}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET}
+      OIDC_REDIRECT_URL: ${OIDC_REDIRECT_URL}
+      # Checked again here even though the provider already enforces it.
+      OIDC_ALLOWED_ROLES: LOGGER,ADMIN
     ports:
       - "3005:3005"
 
@@ -26,7 +35,7 @@ services:
       dockerfile: Dockerfile
     environment:
       VITE_ORQ_URL: https://maestro.logsad.com
-      VITE_LOGIN_URL: https://logsad.com
+      VITE_IDP_NAME: LOGSAD
     volumes:
       - ./maestro-view/dist:/app/dist
 

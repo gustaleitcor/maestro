@@ -1,0 +1,33 @@
+# Dex is the identity provider of the dev stack only: a throwaway OpenID
+# Connect provider with one built-in user, so Maestro can be run and logged
+# in to without any real account. Nothing here is a secret worth keeping.
+#
+#   login:    dev@example.com
+#   password: password
+
+issuer: http://localhost:5556/dex
+
+storage:
+  type: memory
+
+web:
+  http: 0.0.0.0:5556
+
+oauth2:
+  skipApprovalScreen: true
+
+staticClients:
+  - id: maestro
+    name: Maestro
+    secret: maestro-dev-secret
+    redirectURIs:
+      - http://localhost:8081/api/auth/callback
+
+enablePasswordDB: true
+
+staticPasswords:
+  - email: dev@example.com
+    # bcrypt of "password"
+    hash: "$2a$10$rb62d0zMPCLD4eu7mZbnj.ACsfpW6Z6aPdZ21OztPlqt80fRfdwla"
+    username: dev
+    userID: 6f0e6a3c-2f0b-4c5e-9d0a-1b7f3c2a9e11
