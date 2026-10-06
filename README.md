@@ -129,6 +129,26 @@ Users see the machines, and whether orq can reach them, with
 answer in Redis for 30 seconds (10 for a machine it couldn't reach), and
 editing a machine checks it again at once.
 
+### Watching the machines
+
+`maestro top` shows how loaded every machine is, like `top` or `btop`: CPU,
+memory and GPUs at a glance, and with enter on a machine, each core, swap,
+disks, network, GPU memory, temperatures and the containers running on it.
+`maestro top Q1` opens a machine straight away, and `maestro machine stats`
+prints the same once (`--json` for scripts).
+
+orq reads a machine by running one small shell script over the SSH connection
+it already has (`/proc`, `df`, and `nvidia-smi` when there is one), and asks
+Podman for the containers' usage. So the SSH user must be allowed to run
+commands; if it can only reach the Podman socket, the machine still shows,
+with its containers, and says why it has nothing else. Only NVIDIA GPUs are
+read, and only on Linux.
+
+Everyone signed in sees the machines and the containers of their own runs.
+Administrators see every container, and the server orq runs on, as `orq`.
+Readings are kept in Redis for 2 seconds and shared, so any number of open
+windows costs each machine one SSH connection every couple of seconds.
+
 | Variable | Default | |
 | --- | --- | --- |
 | `MACHINE_SECRET` | empty | Encrypts the stored SSH keys; at least 32 characters. Empty disables machines |
