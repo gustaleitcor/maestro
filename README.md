@@ -124,8 +124,10 @@ machine presents then, and compare the fingerprint shown with
 the line from `ssh-keyscan -t ed25519 <host>`. Private keys are stored
 encrypted with `MACHINE_SECRET` and never sent back.
 
-Users see the machines, and whether orq can reach them now, with
-`maestro machine list`.
+Users see the machines, and whether orq can reach them, with
+`maestro machine list`. Checking opens an SSH connection, so orq keeps the
+answer in Redis for 30 seconds (10 for a machine it couldn't reach), and
+editing a machine checks it again at once.
 
 | Variable | Default | |
 | --- | --- | --- |
