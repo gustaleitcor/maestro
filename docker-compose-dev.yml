@@ -10,6 +10,11 @@ services:
     # Dex for the browser and for orq; the issuer URL has to match for both.
     network_mode: host
 
+  # Where sessions are kept. Valkey, KeyDB and Redis speak the same protocol.
+  valkey:
+    image: docker.io/valkey/valkey:8-alpine
+    network_mode: host
+
   orq:
     build:
       context: ./maestro-orq
@@ -18,6 +23,8 @@ services:
     volumes:
       - ./maestro-orq:/usr/src/app:z
       - maestro-orq-dev-data:/data:Z
+      # What runs leave behind: <user>/<run>/<line>/<file>
+      - maestro-orq-dev-runs:/maestro/data:Z
       - ${XDG_RUNTIME_DIR}/podman/podman.sock:/run/podman/podman.sock
     environment:
       MODE: dev # swagger on localhost, and session cookies that work over plain http
@@ -28,14 +35,18 @@ services:
       VIEW_URL: ${VIEW_URL:-http://localhost:8080}
       PODMAN_SOCKET: unix:///run/podman/podman.sock
       BUILD_TIMEOUT: 30m
+      REDIS_URL: redis://localhost:6379
       OIDC_ISSUER: http://localhost:5556/dex
       OIDC_CLIENT_ID: maestro
       OIDC_CLIENT_SECRET: maestro-dev-secret
       OIDC_REDIRECT_URL: http://localhost:8081/api/auth/callback
       OIDC_ALLOWED_ROLES: "" # Dex users carry no roles; let any of them in
+      ADMIN_EMAILS: dev@example.com # so the dev user can manage machines
+      MACHINE_SECRET: maestro-dev-machine-secret-not-for-production
     network_mode: host
     depends_on:
       - dex
+      - valkey
 
   # builds maestro-view into ./maestro-view/dist and exits - use `npm run dev` for live reload
   view:
@@ -50,3 +61,4 @@ services:
 
 volumes:
   maestro-orq-dev-data:
+  maestro-orq-dev-runs:

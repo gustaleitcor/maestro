@@ -7,3 +7,6 @@
 [submodule "maestro-view"]
 	path = maestro-view
 	url = ../maestro-view
+[submodule "maestro-template"]
+	path = maestro-template
+	url = ../maestro-template

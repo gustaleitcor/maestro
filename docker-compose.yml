@@ -7,6 +7,8 @@ services:
     restart: unless-stopped
     volumes:
       - maestro-orq-data:/data:Z
+      # What runs leave behind: <user>/<run>/<line>/<file>
+      - maestro-orq-runs:/maestro/data:Z
       - ${XDG_RUNTIME_DIR}/podman/podman.sock:/run/podman/podman.sock
     environment:
       MODE: prod
@@ -15,6 +17,7 @@ services:
       ALLOWED_ORIGINS: https://maestro.logsad.com
       PODMAN_SOCKET: unix:///run/podman/podman.sock
       BUILD_TIMEOUT: 30m
+      REDIS_URL: ${REDIS_URL}
       VIEW_URL: https://maestro.logsad.com
       # The one identity provider this deployment trusts; values come from .env
       # (see .env.example). Any OpenID Connect provider works.
@@ -24,6 +27,9 @@ services:
       OIDC_REDIRECT_URL: ${OIDC_REDIRECT_URL}
       # Checked again here even though the provider already enforces it.
       OIDC_ALLOWED_ROLES: LOGGER,ADMIN
+      # Users with this role manage the machines containers run on.
+      OIDC_ADMIN_ROLES: ADMIN
+      MACHINE_SECRET: ${MACHINE_SECRET}
     ports:
       - "3005:3005"
 
@@ -41,3 +47,4 @@ services:
 
 volumes:
   maestro-orq-data:
+  maestro-orq-runs:
