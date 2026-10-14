@@ -185,14 +185,59 @@ parameters = ["-t 10 out.txt", "-t 20 out.txt"] # one container per line
 outputs    = ["out.txt"]                     # copied out when each finishes
 ```
 
-orq reads it when it builds the repo (an invalid one fails the build) and
-keeps it with the build. `maestro run <build>` then queues one container per
+The lines can also be computed. `generator` names a Python script in the
+repo that defines a generator called `genvrs`; every string it yields is one
+more line, split as a line of `parameters` is, after those of `parameters`
+when there are both:
+
+```toml
+generator = "genvrs.py"
+```
+
+```python
+import itertools
+from collections.abc import Generator
+
+def genvrs() -> Generator[str]:
+    for t, seed in itertools.product([10, 20, 30], range(3)):
+        yield f"-t {t} --seed {seed} out.txt"
+```
+
+orq runs the script once, when it builds the repo, and the build keeps the
+lines it gave: every run of that build is the same lines. It is run inside
+orq, not in the image, by a CPython 3.14 compiled to WebAssembly: it has
+Python's standard library and the repo, which it can read and not write. It
+starts at the root of the repo and imports from beside itself, so it can
+`import` the repo's other modules and open its files (`open("cases.csv")`).
+Nothing else is there: no packages installed from `requirements.txt` and
+nothing that needs compiling, such as numpy; nothing a symbolic link leads
+to outside the repo; no other file of the server, no network, no
+environment, 256 MB of memory and 30 seconds. What it prints goes to the build log. A
+script that raises, yields something that isn't a string, yields nothing, or
+makes the build's lines more than 1000, fails the build, and the log says
+why.
+
+What orq clones is the repo's files without `.git`, for the generator and
+for the image alike: git keeps the forge token there, and it would end up in
+the image. So a Dockerfile can't ask git for the commit it is built from.
+
+orq reads `maestro.toml` when it builds the repo (an invalid one fails the
+build) and keeps it with the build. `maestro run <build>` then queues one container per
 line, spread over the machines: each line runs once, on whichever allowed
 machine has a free slot first. `maestro run <build> --watch` follows the run
 until it is over, and `maestro build <repo> --run` queues it as soon as the
 image is built; `maestro build <repo> --watch` does both, from a repo to its
 results in one command. orq copies the image to a machine the first
-time it needs it there, streaming `podman save` into `podman load` over SSH.
+time it needs it there, streaming `podman save` into `podman load` over SSH,
+and leaves it there when the run is over, so the next run of that build starts
+without copying it again.
+
+Each user keeps at most 10 built images (an administrator can change the
+number on the Maestro page). A build that would make one more removes the
+image they ran least recently, or built longest ago if they never ran it,
+skipping any a run is still using; it is removed from the machines as well.
+The build's record, runs and files are kept, and `maestro builds rm <build>`
+frees a place by hand.
 Without a `maestro.toml` a run takes the default, which is also what any key
 left out of one falls back to: a single container with the image's own
 `CMD`, on any machine, keeping only what it prints. The build log says which
@@ -235,7 +280,22 @@ text, an html page or an svg a container wrote included, is shown as its
 source and never run; the rest can only be downloaded.
 
 orq keeps everything about runs in its database, so it can restart mid-run:
-containers it started are picked up where they are.
+containers it started are picked up where they are, and those that finished
+while it was off are collected as if it had been there. A build it was making
+when it stopped fails, so it doesn't count against the image limit, and an
+image left of it is removed.
+
+Everything orq makes is labelled with a name it gives itself the first time
+it starts (`maestro.orq`): its images, which also carry their build
+(`maestro.build`), and its containers, which also carry their run and line.
+When orq starts, every 10 minutes, and whenever an image goes, it sweeps each
+machine. A container of its own that no line has there, such as one that was
+left running when a machine was removed and added back, is removed, and so is
+an image of its own that orq itself no longer has and no line needs there,
+tagged or not. Nothing else on a machine is touched: neither the machine's
+own images and containers nor those of another orq that uses it too. What an
+orq made before it labelled things carries no name, and every orq takes it
+for its own, as it did before.
 
 | Variable | Default | |
 | --- | --- | --- |

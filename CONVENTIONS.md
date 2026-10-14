@@ -58,7 +58,7 @@ returns something the handler can write without thinking: see
 | `machine` | machines and the SSH connection to them |
 | `metrics` | how loaded the machines are |
 | `setting` | server-wide limits |
-| `podman`, `gitclone` | the programs orq drives |
+| `podman`, `gitclone`, `python` | the programs orq drives; `python` is inside orq, as WebAssembly, for the scripts of others |
 | `cache`, `kv` | Redis: what is remembered for a while |
 | `apierr`, `response`, `middleware`, `config` | shared plumbing |
 
