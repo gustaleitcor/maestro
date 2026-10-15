@@ -183,7 +183,30 @@ both, and a stand-in program:
 machines   = ["Q1", "Q2", "Q3"]              # leave out for any machine
 parameters = ["-t 10 out.txt", "-t 20 out.txt"] # one container per line
 outputs    = ["out.txt"]                     # copied out when each finishes
+cpus       = 2                               # cores per container; default 1
+memory     = 2048                            # MB per container; default 512
+env        = { SEED = "42" }                 # variables of each container's environment
 ```
+
+There is always a limit: `cpus` is a whole number of cores, at least 1, and
+`memory` at least 6 MB. A machine with fewer cores than `cpus` fails the
+line when it starts. Neither changes how many containers a machine runs at
+once: that is its slots.
+
+orq sets these variables in every container, after those of `env`, whose
+names may not start with `MAESTRO_`:
+
+| Variable | |
+| --- | --- |
+| `MAESTRO_RUN`, `MAESTRO_LINE` | The run's number, and the line's in it, from 1 |
+| `MAESTRO_CPUS` | Its `cpus` |
+| `MAESTRO_MEMORY` | Its `memory`, in MB |
+| `MAESTRO_OUTPUTS` | Its `outputs`, one per line |
+
+A limit on CPUs doesn't change how many cores a program sees, so a solver
+should size itself by `MAESTRO_CPUS`: `threads = int(os.environ["MAESTRO_CPUS"])`.
+The environment is kept with the run and shown by `podman inspect` on the
+machine, so `env` is no place for secrets.
 
 The lines can also be computed. `generator` names a Python script in the
 repo that defines a generator called `genvrs`; every string it yields is one
@@ -203,6 +226,36 @@ def genvrs() -> Generator[str]:
         yield f"-t {t} --seed {seed} out.txt"
 ```
 
+Above `genvrs`, the script may define a class `Config` with the keys that
+can differ from one line to the next: `outputs`, `cpus`, `memory` and `env`.
+A key the class leaves out or sets to `None` has what `maestro.toml` says, or
+its default (`[]`, `1`, `512`, `{}`); any other value overrides it. `genvrs`
+changes them on the class, `None` going back to `maestro.toml`'s, and each
+line runs with what the class holds when it is yielded, checked as
+`maestro.toml` is:
+
+```python
+class Config:
+    outputs: list[str] | None = None     # default: none
+    cpus: int | None = 4                 # instead of maestro.toml's; default: 1
+    memory: int | None = None            # MB; default: 512
+    env: dict[str, str] | None = None    # default: none
+
+def genvrs() -> Generator[str]:
+    yield "-t 10 small"          # 4 CPUs, maestro.toml's memory
+    Config.memory = 4096
+    for seed in range(3):
+        Config.env = {"SEED": str(seed)}
+        yield "-t 10 large"      # 4 CPUs, 4096 MB, SEED 0, 1 and 2
+    Config.memory = None
+    yield "-t 10 medium"         # 4 CPUs, maestro.toml's memory again
+```
+
+`machines` is set in `maestro.toml` only, the same for every line. Any other
+name in `Config`, `machines` included, fails the build, so that a misspelt
+key isn't ignored. A run lists the outputs of all its lines together; each
+line keeps only its own.
+
 orq runs the script once, when it builds the repo, and the build keeps the
 lines it gave: every run of that build is the same lines. It is run inside
 orq, not in the image, by a CPython 3.14 compiled to WebAssembly: it has
@@ -212,10 +265,10 @@ starts at the root of the repo and imports from beside itself, so it can
 Nothing else is there: no packages installed from `requirements.txt` and
 nothing that needs compiling, such as numpy; nothing a symbolic link leads
 to outside the repo; no other file of the server, no network, no
-environment, 256 MB of memory and 30 seconds. What it prints goes to the build log. A
-script that raises, yields something that isn't a string, yields nothing, or
-makes the build's lines more than 1000, fails the build, and the log says
-why.
+environment, 256 MB of memory and 30 seconds. What it prints goes to the
+build log. A script that raises, yields something that isn't a string,
+yields nothing, makes the build's lines more than 1000, or gives a line an
+invalid `Config`, fails the build, and the log says why.
 
 What orq clones is the repo's files without `.git`, for the generator and
 for the image alike: git keeps the forge token there, and it would end up in
@@ -240,7 +293,7 @@ The build's record, runs and files are kept, and `maestro builds rm <build>`
 frees a place by hand.
 Without a `maestro.toml` a run takes the default, which is also what any key
 left out of one falls back to: a single container with the image's own
-`CMD`, on any machine, keeping only what it prints. The build log says which
+`CMD`, on any machine, with 1 core and 512 MB, keeping only what it prints. The build log says which
 one a build got.
 
 When a container finishes, orq keeps what it printed and the outputs it
@@ -301,7 +354,6 @@ for its own, as it did before.
 | --- | --- | --- |
 | `DATA_DIR` | `/maestro/data` | Where runs' logs and outputs are kept |
 | `RUN_OUTPUT_MAX_MB` | `1024` | Logs and outputs kept per line; the rest is dropped, with a note |
-| `RUN_MEMORY_MB` | `512` | Memory limit per container; `0` for none |
 | `RUN_PIDS` | `512` | Process limit per container; `0` for none |
 
 ## What orq remembers, and for how long
