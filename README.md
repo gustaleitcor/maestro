@@ -127,9 +127,11 @@ needs nothing but sshd and Podman's API socket
 Administrators add machines on the Maestro page, under "Admin panel":
 host, SSH port and user, the socket path (e.g.
 `/run/user/1000/podman/podman.sock`), and a private key without a
-passphrase, and how many containers it runs at once (slots). Saving
-connects and asks Podman for its version, so only a
-working machine is saved. Leave the host key empty to pin the one the
+passphrase, and how many cores and how much memory to keep back for the
+machine's own system. Saving connects and asks Podman for its version, cores
+and memory, so only a working machine is saved, and a reserve that leaves
+nothing for lines is refused. orq asks again whenever it checks the machine,
+so a machine that grows or shrinks is seen. Leave the host key empty to pin the one the
 machine presents then, and compare the fingerprint shown with
 `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` on the machine; or paste
 the line from `ssh-keyscan -t ed25519 <host>`. Private keys are stored
@@ -146,9 +148,10 @@ a machine checks it again at once.
 ### Watching the machines
 
 `maestro top` shows how loaded every machine is, like `top` or `btop`, one
-machine to a row: CPU, memory, GPUs, load, and under `SLOTS` how much of it
-Maestro is using. `2/4 +3` is two of its four slots holding a container and
-three lines waiting for one. With enter on a machine: each core, swap, disks,
+machine to a row: CPU, memory, GPUs, load, and under `CORES` how much of it
+Maestro is using. `6/14 +3` is lines taking six of the fourteen cores the
+machine has for them (what it has less what is kept back), and three lines
+waiting; the machine's own page says the same of memory. With enter on a machine: each core, swap, disks,
 network, GPU memory, temperatures and the containers running on it, with
 whose each is and the repo it was built from. `maestro top Q1` opens a
 machine straight away, and `maestro machines stats` prints the table once
@@ -164,8 +167,8 @@ read, and only on Linux.
 Everyone signed in sees the machines and the containers of their own runs.
 Administrators see every container, and the server orq runs on, as `orq`.
 Readings are kept in Redis for 2 seconds and shared, so any number of open
-windows costs each machine one SSH connection every couple of seconds. Slots
-and the queue come from orq's own records, and are never that old.
+windows costs each machine one SSH connection every couple of seconds. What
+lines take and the queue come from orq's own records, and are never that old.
 
 | Variable | Default | |
 | --- | --- | --- |
@@ -189,9 +192,11 @@ env        = { SEED = "42" }                 # variables of each container's env
 ```
 
 There is always a limit: `cpus` is a whole number of cores, at least 1, and
-`memory` at least 6 MB. A machine with fewer cores than `cpus` fails the
-line when it starts. Neither changes how many containers a machine runs at
-once: that is its slots.
+`memory` at least 6 MB. They also decide where and when a line runs: a
+machine starts a line only while its cores and memory fit in what the
+machine has, less what is kept back and what the lines already there take.
+A run with a line larger than every machine it may use, even empty, is
+refused, so asking for less lets a line start sooner.
 
 orq sets these variables in every container, after those of `env`, whose
 names may not start with `MAESTRO_`:
@@ -277,7 +282,8 @@ the image. So a Dockerfile can't ask git for the commit it is built from.
 orq reads `maestro.toml` when it builds the repo (an invalid one fails the
 build) and keeps it with the build. `maestro run <build>` then queues one container per
 line, spread over the machines: each line runs once, on whichever allowed
-machine has a free slot first. `maestro run <build> --watch` follows the run
+machine has room for it first. Lines start in the order they were queued,
+oldest run first, and a line that doesn't fit yet holds back those after it. `maestro run <build> --watch` follows the run
 until it is over, and `maestro build <repo> --run` queues it as soon as the
 image is built; `maestro build <repo> --watch` does both, from a repo to its
 results in one command. orq copies the image to a machine the first
