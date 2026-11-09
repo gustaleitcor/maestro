@@ -339,7 +339,8 @@ text, an html page or an svg a container wrote included, is shown as its
 source and never run; the rest can only be downloaded.
 
 orq keeps everything about runs in its database, so it can restart mid-run:
-containers it started are picked up where they are, and those that finished
+lines it was about to start are started again, containers it started are
+picked up where they are, and those that finished
 while it was off are collected as if it had been there. A build it was making
 when it stopped fails, so it doesn't count against the image limit, and an
 image left of it is removed.

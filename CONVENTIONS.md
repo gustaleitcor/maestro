@@ -55,6 +55,7 @@ returns something the handler can write without thinking: see
 | `image` | the built images in orq's Podman |
 | `container` | runs: queueing them, listing them, their logs and files |
 | `runner` | the loop that starts containers and keeps what they leave; where things are on disk (`Data`) |
+| `sched` | which waiting line runs where: pure, without the database or the machines, so a simulator can run it too |
 | `machine` | machines and the SSH connection to them |
 | `metrics` | how loaded the machines are |
 | `setting` | server-wide limits |
