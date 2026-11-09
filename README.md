@@ -307,7 +307,31 @@ settings it was staged under.
 everyone's, and your share; `maestro usage` the core-hours and memory
 GB-hours your lines used each day, counted as they end, and `maestro
 settings` how the scheduler is set up. Administrators see every user, and
-the page has the same under "Queue". `maestro run <build> --watch` follows the run
+the page has the same under "Queue".
+
+### Comparing policies
+
+`maestro export --since 2026-11-01` writes, as CSV, what happened to each
+of your lines over a period (administrators: `--all` for everyone's): when
+it was submitted, staged, assigned, started and finished, where, and under
+which scheduler settings. `sim`, in maestro-orq, measures such a file, or
+makes one by running orq's own scheduler over a workload on a simulated
+clock, so that policies can be compared without the machines:
+
+```sh
+cd maestro-orq
+go run ./cmd/sim generate -users 4 -hours 8 > workload.csv
+go run ./cmd/sim run -machines Q1:32:65536:2:4096 -config drf.json < workload.csv > lines.csv
+go run ./cmd/sim evaluate -cpus 30 -memory 61440 < lines.csv
+```
+
+A config is the scheduler's settings as JSON, as `GET /api/settings` shows
+them under `scheduler` (for instance `{"select": "pq", "share_weight": -1}`
+for DRF); without one, FIFO everywhere. `evaluate` reports the mean wait
+(and how much of it at each level), the mean time in the system, the mean
+bounded slowdown, the utilization of cores and memory, and Jain's index of
+users' slowdowns. A simulated line starts as soon as it is chosen; a real
+one first has its image copied and its container created. `maestro run <build> --watch` follows the run
 until it is over, and `maestro build <repo> --run` queues it as soon as the
 image is built; `maestro build <repo> --watch` does both, from a repo to its
 results in one command. orq copies the image to a machine the first

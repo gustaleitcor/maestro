@@ -20,6 +20,7 @@ internal/api        the routes, and nothing else
 internal/<resource> one package per resource: what the API can do with it
 internal/db         migrations, queries, and the code sqlc writes from them
 docs/               the code swag writes from the routes' annotations
+cmd/sim             the simulator: policies compared without the machines
 ```
 
 ### `internal/api` is only routes
@@ -56,6 +57,8 @@ returns something the handler can write without thinking: see
 | `container` | runs: queueing them, listing them, their logs and files |
 | `runner` | the loop that starts containers and keeps what they leave; where things are on disk (`Data`) |
 | `sched` | which waiting line runs where: pure, without the database or the machines, so a simulator can run it too |
+| `simulate` | running `sched` over a workload on a simulated clock, for `cmd/sim` |
+| `evaluation` | how lines were served: waits, slowdowns, utilization, fairness, from a simulation or an export alike |
 | `machine` | machines and the SSH connection to them |
 | `metrics` | how loaded the machines are |
 | `setting` | server-wide limits |
