@@ -287,9 +287,27 @@ starts: `queued`, among its user's lines; `staged`, chosen from them and
 waiting for a machine; and `assigned`, given to a machine and waiting for
 room on it, while orq copies its image there. Only a few lines are staged at
 a time (twice the machines) and only three wait on each machine, so which
-user's line goes next is decided as late as it can be. For now each level
-takes lines in the order they were queued, oldest run first, and on a
-machine a line that doesn't fit yet holds back those after it. `maestro run <build> --watch` follows the run
+user's line goes next is decided as late as it can be.
+
+An administrator sets on the Maestro page, under "Admin panel", how each
+level orders its lines. Until then each takes them in the order they were
+queued, oldest run first, and on a machine a line that doesn't fit yet
+holds back those after it. The policies are FIFO, FIFO-skip (the oldest that
+fits), LCFS, SIRO (random, repeatable with a seed), best-fit, weighted
+best-fit (with how long a line has waited) and PQ, the highest score
+ω1·cores + ω2·memory + ω3·waiting + ω4·share. A user's share of the machines
+is what their lines hold now (DRF, optionally weighted per user) or what
+they used, each hour counting half as much a half-life later (fair-share);
+with ω4 below 0, whoever has less goes first. Staged lines go to the first
+machine where they would start now, or with Tetris to the one whose free
+cores and memory are most like what the line needs. Each line records the
+settings it was staged under.
+
+`maestro queue` shows how many lines wait at each level, yours and
+everyone's, and your share; `maestro usage` the core-hours and memory
+GB-hours your lines used each day, counted as they end, and `maestro
+settings` how the scheduler is set up. Administrators see every user, and
+the page has the same under "Queue". `maestro run <build> --watch` follows the run
 until it is over, and `maestro build <repo> --run` queues it as soon as the
 image is built; `maestro build <repo> --watch` does both, from a repo to its
 results in one command. orq copies the image to a machine the first
