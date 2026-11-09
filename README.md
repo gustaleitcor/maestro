@@ -282,8 +282,14 @@ the image. So a Dockerfile can't ask git for the commit it is built from.
 orq reads `maestro.toml` when it builds the repo (an invalid one fails the
 build) and keeps it with the build. `maestro run <build>` then queues one container per
 line, spread over the machines: each line runs once, on whichever allowed
-machine has room for it first. Lines start in the order they were queued,
-oldest run first, and a line that doesn't fit yet holds back those after it. `maestro run <build> --watch` follows the run
+machine has room for it first. A line waits at three levels before it
+starts: `queued`, among its user's lines; `staged`, chosen from them and
+waiting for a machine; and `assigned`, given to a machine and waiting for
+room on it, while orq copies its image there. Only a few lines are staged at
+a time (twice the machines) and only three wait on each machine, so which
+user's line goes next is decided as late as it can be. For now each level
+takes lines in the order they were queued, oldest run first, and on a
+machine a line that doesn't fit yet holds back those after it. `maestro run <build> --watch` follows the run
 until it is over, and `maestro build <repo> --run` queues it as soon as the
 image is built; `maestro build <repo> --watch` does both, from a repo to its
 results in one command. orq copies the image to a machine the first
