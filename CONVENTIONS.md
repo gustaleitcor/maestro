@@ -160,14 +160,17 @@ src/components/      one component per page or per piece of one
 src/style.css        the colours, and every class more than one component uses
 ```
 
-- No router and no store: the page is in the hash (`#files/…`, `#admin`),
-  read and written only in `App.vue`. A component says where to go with an
-  event (`navigate`), and is told where it is with a prop.
+- No router and no store: the page is in the hash (`#files/…`, `#queue`,
+  `#usage`, `#admin/<section>`), read and written only in `App.vue`. A
+  component says where to go with an event (`navigate`), and is told where it
+  is with a prop. `SideNav` is the sidebar every signed-in page has, beside it
+  in `PageShell`; each page draws its own `.top` bar.
 - A component talks to orq with `fetch(…, { credentials: 'include' })`, and
   emits `unauthorized` on a 401 instead of handling it.
 - A class used by two components goes in `style.css` (`.btn`, `.card`,
-  `.pill`, `.panel`); one used by a single component stays in its
-  `<style scoped>`. Icons are `EntryIcon`, not a font.
+  `.pill`, `.row`, `.top`), and its colours are the tokens at the top of it;
+  one used by a single component stays in its `<style scoped>`. Icons are
+  `EntryIcon`, not a font or an image.
 - What a file is, and whether it may be shown, is decided by orq. The view
   never runs or renders what a container wrote as part of the page.
 - No new dependencies without asking: it is Vue and Vite.

@@ -136,7 +136,7 @@ SSH and talks to the Podman socket through that connection, so the machine
 needs nothing but sshd and Podman's API socket
 (`systemctl --user enable --now podman.socket` for the SSH user).
 
-Administrators add machines on the Maestro page, under "Admin panel":
+Administrators add machines on the Maestro page, under Admin › Machines:
 host, SSH port and user, the socket path (e.g.
 `/run/user/1000/podman/podman.sock`), and a private key without a
 passphrase, and how many cores and how much memory to keep back for the
@@ -304,7 +304,7 @@ group), and groups take turns at the machines. Only three lines wait on
 each machine, so which user's line goes next is decided as late as it can
 be.
 
-An administrator sets on the Maestro page, under "Admin panel", the four
+An administrator sets on the Maestro page, under Admin › Settings, the four
 policies: which of a user's lines is next, whose line is staged among a
 group's users, which of a group's staged lines goes to a machine in the
 group's turn, and which line waiting on a machine starts. Until then each
@@ -319,19 +319,21 @@ goes to a machine drawn among those it may use that have room in their
 queue; nothing is kept for it there. Only the machine's own policy fits
 lines in what it has free, so it may also be FIFO-skip (the oldest that
 fits), best-fit, weighted best-fit (with how long a line has waited) or
-Tetris (the line whose needs are most like the free cores and memory). The
-same page has the groups: making, renaming and removing them, and moving
-users between them. Each line records the settings it was staged under,
+Tetris (the line whose needs are most like the free cores and memory).
+Admin › Groups has the groups: making, renaming and removing them, and
+moving users between them (Add member, or ✕ to send someone back to the
+default group). Each line records the settings it was staged under,
 and its user's group.
 
 `maestro queue` shows how many lines wait at each level, yours and
 everyone's, your group and how many of its lines are staged, and your
 share; `maestro usage` the core-hours and memory
 GB-hours your lines used each day, counted as they end, and `maestro
-settings` how the scheduler is set up. Administrators see every user, and
-the page has the same under "Queue", where "Lines over a period" also
-downloads what `maestro export` writes and measures it as `sim evaluate`
-does, against what the machines have for lines now.
+settings` how the scheduler is set up. Administrators see every user. The
+page has the first under Queue, read again every 5 seconds, and the core-hours
+under Usage, where "Lines over a period" also downloads what `maestro
+export` writes and measures it as `sim evaluate` does, against what the
+machines have for lines now.
 
 ### Comparing policies
 
@@ -411,9 +413,14 @@ they print a new copy only when something changed. `--json` prints once, so
 it can't be used with `--watch`. `maestro runs list --all` gives an
 administrator everyone's runs, with whose each is.
 
-The Maestro page is the same files: it opens on them once signed in, as
-`<run>/<line>/<file>`, with everyone's for administrators. A file, or either
-of a line's logs, can be seen in the page or in a tab of its own, and downloaded; a line or a
+The Maestro page is the same files: it opens on My runs once signed in, as
+`<run>/<line>/<file>`, and administrators have everyone's under All users.
+Its sidebar leads to My runs, Queue and Usage, and for administrators to All
+users and the Admin pages (Machines, Groups, Settings); on a narrow screen it
+is a rail of icons. My runs can be narrowed to active or finished runs, or
+searched by run or repository. A file, or either of a line's logs, opens in
+a pane beside the line's files (a running line's logs are read again every 5
+seconds), or in a tab of its own, and can be downloaded; a line or a
 whole run downloads as a zip, laid out as `maestro runs get` leaves it. Only
 png, jpeg, gif and webp images, PDFs and text are shown. Whatever else is
 text, an html page or an svg a container wrote included, is shown as its
