@@ -88,6 +88,18 @@ session that is already open.
 
 Install `maestro` from the
 [maestro-cli releases](https://github.com/gustaleitcor/maestro-cli/releases).
+On Linux, a package installs it in `/usr/bin` with its shell completions:
+
+```sh
+sudo dnf install ./maestro-*.x86_64.rpm            # Fedora, RHEL, Rocky, Alma
+sudo zypper install --allow-unsigned-rpm ./maestro-*.x86_64.rpm   # openSUSE
+sudo apt install ./maestro_*_amd64.deb             # Ubuntu, Debian, Mint, Pop!_OS
+sudo apk add --allow-untrusted ./maestro_*_x86_64.apk             # Alpine
+sudo pacman -U ./maestro-*-x86_64.pkg.tar.zst      # Arch, Manjaro, EndeavourOS
+```
+
+On ARM machines, take the aarch64 or arm64 one. Elsewhere, or without root,
+the `.tar.gz` holds the same binary, which needs nothing else.
 
 `maestro login` prints a short code and a link to the view; approving the
 code there hands the CLI its own Maestro key. The link is not opened for
