@@ -57,6 +57,7 @@ returns something the handler can write without thinking: see
 | `container` | runs: queueing them, listing them, their logs and files |
 | `runner` | the loop that starts containers and keeps what they leave; where things are on disk (`Data`) |
 | `sched` | which waiting line runs where: pure, without the database or the machines, so a simulator can run it too |
+| `group` | the groups users are split into, and who is in which |
 | `simulate` | running `sched` over a workload on a simulated clock, for `cmd/sim` |
 | `evaluation` | how lines were served: waits, slowdowns, utilization, fairness, from a simulation or an export alike |
 | `machine` | machines and the SSH connection to them |

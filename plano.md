@@ -6,9 +6,9 @@ Trocar o despacho por slot do `runner` por um sistema hierárquico de três fila
 
 ## Modelo
 
-O sistema distribui tarefas de vários usuários entre computadores idênticos, de forma online (as tarefas chegam ao longo do tempo) e não clarividente (a duração de uma tarefa é desconhecida até ela terminar). Cada computador roda várias tarefas ao mesmo tempo, limitado por CPU e memória.
+O sistema distribui tarefas de vários usuários entre computadores de capacidades possivelmente diferentes (no estudo de caso, idênticos), de forma online (as tarefas chegam ao longo do tempo) e não clarividente (a duração de uma tarefa é desconhecida até ela terminar). Cada computador roda várias tarefas ao mesmo tempo, limitado por CPU e memória.
 
-**Entidades.** U é o conjunto de usuários e C o de computadores. Cada usuário u submete lotes b, e cada lote é um conjunto de tarefas Jb, não necessariamente iguais. u(j) é o dono da tarefa j. Cada computador c tem capacidade de memória Cr(c) e de CPUs Cc(c); cada tarefa declara Rr(j) e Rc(j). Os instantes de submissão, início e fim são τsub, τini e τfim; daí o tempo de espera Wj = τini − τsub e o de serviço Sj = τfim − τini.
+**Entidades.** U é o conjunto de usuários e C o de computadores. Cada usuário u submete lotes b, e cada lote é um conjunto de tarefas Jb, não necessariamente iguais. u(j) é o dono da tarefa j. Os usuários são particionados num conjunto G de grupos: cada usuário pertence a exatamente um grupo g(u). Por padrão há um só grupo, a ampla concorrência, e o admin cria novos grupos quando um conjunto de usuários precisa de vagas próprias. A duração p(j, c) depende do computador e só é conhecida quando a tarefa termina. Cada computador c tem capacidade de memória Cr(c) e de CPUs Cc(c); cada tarefa declara Rr(j) e Rc(j). Os instantes de submissão, início e fim são τsub, τini e τfim; daí o tempo de espera Wj = τini − τsub e o de serviço Sj = τfim − τini.
 
 **Restrições.** Qc(t) são as tarefas atribuídas a c no instante t (esperando ou executando) e Ec(t) ⊆ Qc(t) as que executam. Uma tarefa está atribuída a no máximo um computador, e só a um computador do seu conjunto elegível M(j) ⊆ C, que o usuário define no lote (todos os computadores, se ele não restringir). Formalmente, xjc(t) = 0 para todo c ∉ M(j). Com margens de segurança εr, εc ≥ 0 reservadas em cada computador, a todo instante:
 
@@ -21,7 +21,7 @@ Só o que executa consome recurso; o que espera na fila da máquina não. Uma ta
 **Filas.** Três níveis, cada um com sua política:
 
 1. **Fila de submissão** de cada usuário: suas tarefas pendentes. Política Pu, a ordem de atendimento dentro do usuário.
-2. **Fila intermediária**: tarefas já retiradas das filas de submissão, ainda sem computador. Política Pm, que decide qual tarefa sai das filas e para qual computador vai.
+2. Fila intermediária de cada grupo: tarefas já retiradas das filas de submissão dos usuários do grupo, ainda sem computador, no máximo K^int por grupo. Duas políticas atuam aqui: Ps (seleção), que decide, dentro do grupo, de qual usuário sai a próxima tarefa para a intermediária do grupo, e Pa (alocação), que atende os grupos em round robin e, na vez de cada grupo, escolhe uma tarefa da intermediária dele e a vincula a um computador de M(j) com vaga na fila (menos de k tarefas), sorteado quando há mais de um. Pa não reserva recurso: quem checa se a tarefa cabe é Pc, ao promover.
 3. **Fila de execução** de cada computador: tarefas atribuídas a ele que esperam recurso, Qc(t) \\ Ec(t). Política Pc, a ordem em que são promovidas à execução.
 
 **Políticas disponíveis** em qualquer nível:
@@ -36,7 +36,7 @@ Só o que executa consome recurso; o que espera na fila da máquina não. Uma ta
 | Best-Fit | Entre as que cabem, a que deixa menor sobra |
 | Weighted Best-Fit | Best-Fit com peso extra para quem espera há mais tempo (aging) |
 
-As três de encaixe dependem do recurso livre de um computador, então se aplicam naturalmente a Pm e Pc. Em Pu, usam o recurso livre do cluster inteiro.
+As três de encaixe dependem do recurso livre de um computador, e só a fila de execução conhece esse valor. Por isso se aplicam apenas a Pc: em Pu e Ps a tarefa ainda não tem computador, e Pa só vincula a tarefa a um computador, sem reservar recurso, então não há noção de caber (decidido em 9/11).
 
 **Seleção: PQ por s(j, t), com a medida de T̂u escolhida pelo admin.** A seleção aplica PQ às cabeças das filas de submissão, ou seja, à primeira tarefa de cada usuário segundo Pu, e retira a de maior escore. A justiça entra pelo termo ω4 · T̂u(t), e as variantes da literatura diferem só em como a parcela do usuário é medida:
 
@@ -58,7 +58,7 @@ O CEEI (seção 5.2) fica de fora: exige resolver uma otimização sobre as dema
 
 No DRF original, o cluster é tratado como um único conjunto de recursos (a tarefa cabe se C + Di ≤ R) e não há escolha de máquina. O próprio artigo deixa como trabalho futuro reduzir a fragmentação sem perder a justiça e tratar restrições de alocação, como preferência de máquina (seção 9.1). No modelo, isso é a etapa de alocação e o conjunto M(j).
 
-**Na alocação há duas escolhas distintas:** a ordem em que as tarefas da intermediária são consideradas (ordem de chegada à intermediária, ou o escore via PQ) e, para cada tarefa, a máquina (política de encaixe dentro de M(j)). O escore compara tarefas entre si; o encaixe compara máquinas para uma tarefa.
+Na alocação há três escolhas distintas: de qual grupo sai a próxima tarefa (round robin entre os grupos, pulando o grupo sem tarefa com computador elegível com vaga), qual tarefa da intermediária do grupo vai primeiro (a política Pa: FIFO, LCFS, SIRO ou PQ) e o computador, sorteado entre os de M(j) com vaga na fila. O encaixe por recurso não entra aqui: fica com Pc.
 
 **Política de alocação Tetris** (Grandl et al., SIGCOMM 2014). Para uma tarefa j, cada máquina elegível c recebe um escore de alinhamento, o produto escalar entre a demanda normalizada da tarefa e o recurso livre normalizado da máquina:
 
@@ -67,6 +67,8 @@ a(j,c) = \hat{R}_c(j) \cdot \hat{F}_c(c) + \hat{R}_r(j) \cdot \hat{F}_r(c)
 ```
 
 em que F̂c(c) e F̂r(c) são a CPU e a memória livres de c (já descontadas as margens ε), normalizadas pela capacidade de c. A tarefa vai para a máquina de maior alinhamento, o que coloca tarefas pesadas em CPU onde sobra CPU e reduz a fragmentação. O artigo acrescenta um parâmetro de justiça f ∈ \[0, 1\]: só as tarefas da fração (1 − f) de usuários mais atrasados em justiça podem ser alocadas; f = 0 é empacotamento puro, valores maiores pesam mais a justiça. No Maestro, f é configurável pelo admin (padrão 0, já que a justiça principal acontece na seleção).
+
+Atualização de 9/11: como Pa não reserva recurso, o Tetris não se aplica à alocação. Fica fora do fatorial; se for usado, entra como política de Pc, escolhendo entre as tarefas da fila de um computador a de maior alinhamento com o recurso livre dele.
 
 **Base teórica de M(j): Choosy** (Ghodsi et al., EuroSys 2013). Generaliza o DRF para tarefas com restrições de máquina (*constrained max-min fairness*): cada usuário recebe o máximo que consegue nas máquinas que pode usar, sem que um usuário restrito seja prejudicado nem prejudique os outros além do necessário. É a referência para justificar que a seleção continue justa mesmo com `machines` no `maestro.toml`. Na implementação, a consequência prática é: se a cabeça do usuário escolhido não tem máquina elegível com espaço, a seleção passa ao próximo usuário em vez de bloquear.
 
@@ -83,7 +85,7 @@ s(j,t) = \omega_1 \hat{R}_c(j) + \omega_2 \hat{R}_r(j) + \omega_3 \hat{w}_j(t) +
 - T̂u(t) = Tu(t) / Σ Tu′(t): parcela relativa do usuário, segundo a medida que o admin escolher (ver Seleção, abaixo). Na medida histórica, Tu(t) é a parcela dominante de consumo com decaimento: para cada recurso (CPU e memória), soma-se o consumo das tarefas do usuário (Rc·tempo ou Rr·tempo), cada instante pesando 2^(−idade/h) com meia-vida h; divide-se pela capacidade útil do cluster naquele recurso, Σ(C(c) − ε); e fica o maior dos dois valores.
 - ω3 > 0 dá aging; ω4 < 0 penaliza quem já consumiu mais (fair-share, generalizado para vários recursos pelo DRF de Ghodsi et al.); ω1, ω2 < 0 favorecem tarefas pequenas, positivos favorecem as grandes.
 
-**Métricas que o código precisa permitir calcular.** Espera média Wq = E\[Wj\], tempo no sistema Ws = Wq + E\[S\], utilização de CPU e de RAM no tempo, bounded slowdown BSLDj = max((Wj + Sj) / max(Sj, θ), 1) e o índice de Jain sobre uma medida por usuário. Todas saem de τsub, τini, τfim, Rc, Rr e do dono de cada tarefa, desde que esses instantes sejam gravados corretamente.
+**Métricas que o código precisa permitir calcular.** Espera média Wq = E\[Wj\], tempo no sistema Ws = Wq + E\[S\], utilização de CPU e de RAM no tempo, bounded slowdown BSLDj = max((Wj + Sj) / max(Sj, θ), 1) e o índice de Jain sobre uma medida por usuário. Todas saem de τsub, τini, τfim, Rc, Rr e do dono de cada tarefa, desde que esses instantes sejam gravados corretamente. A tese resume a qualidade de uma execução numa função objetivo única, Z = média de F\_b + λ\_J·Φ\_J + λ\_O·Φ\_O: F\_b é o tempo de resposta do experimento (fim da última tarefa menos a submissão), Φ\_J a média no tempo da diferença entre a maior e a menor parcela dominante entre os usuários com demanda, e Φ\_O a média no tempo da fração ociosa enquanto há tarefa esperando. Para isso o código precisa gravar também o grupo e o experimento de cada linha.
 
 ## Ponto de partida
 
@@ -91,7 +93,7 @@ O que o `maestro-orq` faz hoje (commit `c141d93`), e onde cada ponto toca a teor
 
 | Hoje no código | Consequência | Na teoria |
 | --- | --- | --- |
-| Uma goroutine por máquina chama `ClaimLine` enquanto `ativas < Slots` | A máquina decide sozinha qual linha pega; não há visão global | Pm precisa ver todos os usuários e todas as máquinas |
+| Uma goroutine por máquina chama `ClaimLine` enquanto `ativas < Slots` | A máquina decide sozinha qual linha pega; não há visão global | Ps e Pa precisam ver todos os usuários e todas as máquinas |
 | `ClaimLine` ordena por `run_id, line` | FIFO por experimento: um experimento grande segura todos os outros | É a linha de base FIFO/FIFO/FIFO |
 | `machines.slots` conta linhas | CPU e RAM da linha são aplicados ao container, mas não entram na decisão | Restrições (2) e (3) com Cc, Cr, εc, εr |
 | `run_lines.cpus` e `memory` | Já existem por linha | Rc(j) e Rr(j) |
@@ -115,11 +117,11 @@ Recomendo manter `run` e `line` no código, porque API, CLI e view já usam esse
 | εc, εr | não existe | `reserve_cpus`, `reserve_memory` | `margin_*`, `headroom_*` |
 | τ\_ini | `started_at`, gravado no claim | `started_at` gravado em `SetLineRunning` |  |
 | (métricas por nível) | não existe | `staged_at`, `assigned_at` |  |
-| Pu, Pm, Pc | não existe | pacote `internal/sched`; o `runner` vira só executor | `internal/queue` |
+| Pu, Ps, Pa, Pc | não existe | pacote `internal/sched`; o `runner` vira só executor | `internal/queue` |
 
 **O ponto que mexe na tese:** Pm hoje faz duas coisas, escolher de qual usuário sai a próxima tarefa e escolher a máquina. No código, são duas funções diferentes com entradas diferentes. Duas saídas:
 
-1. Manter três políticas na tese e dizer que Pm tem duas etapas, seleção (`queued` → `staged`) e alocação (`staged` → `assigned`). Esta é a escolhida: o modelo continua com três políticas.
+1. Manter três políticas na tese e dizer que Pm tem duas etapas, seleção (`queued` → `staged`) e alocação (`staged` → `assigned`). Descartada em favor da opção 2.
 2. Separar em quatro políticas (Pu, Ps, Pa, Pc). Mais limpo, mas muda a descrição do modelo na tese.
 
 ## Fluxo completo
@@ -136,11 +138,11 @@ Cada fila é um valor da coluna `run_lines.status`, e cada decisão de política
 
 &#91;embedded content: estados de uma linha · 3 filas, 3 decisões\]
 
-A seleção e a alocação são as duas metades de Pm. Pu decide a ordem dentro de `queued` de um usuário; Pc decide a ordem dentro de `assigned` de uma máquina.
+A seleção é a política Ps e a alocação, a política Pa. Pu decide a ordem dentro de `queued` de um usuário; Pc decide a ordem dentro de `assigned` de uma máquina.
 
 **Três regras que seguram o desenho:**
 
-- **Puxar, nunca empurrar.** `queued` → `staged` só acontece se `staged` está abaixo da capacidade (padrão: 2 × máquinas ativas, configurável pelo admin). Sem esse limite, tudo escorre para a intermediária na submissão e a justiça do nível 1 some.
+- **Puxar, nunca empurrar.** `queued` → `staged` só acontece se `a staged do grupo do usuário` está abaixo da capacidade (padrão: 2 × máquinas ativas, configurável pelo admin). Sem esse limite, tudo escorre para a intermediária na submissão e a justiça do nível 1 some.
 - **Um passo central decide, as goroutines executam.** No `tick`, uma única função lê o estado, roda as três políticas e grava as transições numa transação. As goroutines por máquina ficam só com o lento: copiar imagem, criar, inspecionar, coletar. Isso acaba com a corrida entre máquinas no `ClaimLine`.
 - **Núcleo puro.** O passo central recebe um retrato do estado e devolve a lista de transições, sem SQL nem SSH dentro. O mesmo código roda depois num simulador de eventos discretos, para comparar políticas sob cargas sintéticas sem ocupar o cluster.
 
@@ -185,7 +187,7 @@ O orq passa a respeitar as restrições de CPU e memória, ainda com a ordem atu
 A decisão sai das goroutines por máquina e vai para uma função pura chamada no `tick`. Com políticas FIFO, o comportamento é idêntico ao da fase 1.
 
 - [ ] Tipos `Snapshot`, `Move`, `Machine`, `Task` e a função `Step(Snapshot, Policies) []Move`, sem SQL, SSH ou relógio real.
-- [ ] Interface única de ordenação, usada pelos três níveis: `Pick(cands []Task, free Resources, now time.Time) (int, bool)`. O `free` é o do cluster em Pu e o da máquina em Pm e Pc.
+- [ ] Interface única de ordenação, usada pelos três níveis: `Pick(cands []Task, free Resources, now time.Time) (int, bool)`. O `free` é o do cluster em Pu e o da máquina em Pa e Pc.
 - [ ] No `tick`: montar o `Snapshot` a partir do banco, chamar `Step`, aplicar os `Move` numa transação, e só então disparar as goroutines, que agora apenas executam linhas já marcadas `starting`.
 - [ ] Remover `ClaimLine` e `CountClaimableLines`.
 - [ ] Teste de equivalência: para um mesmo cenário, FIFO/FIFO/FIFO produz a mesma sequência de starts que o código antigo.
@@ -193,8 +195,9 @@ A decisão sai das goroutines por máquina e vai para uma função pura chamada 
 ### Fase 3: as filas intermediária e de execução
 
 - [ ] Migração: estados `staged` e `assigned` em `run_lines`, colunas `staged_at` e `assigned_at`, índice por `(status, machine)`.
-- [ ] Seleção: enquanto `staged` estiver abaixo da capacidade, aplicar Pm às cabeças das filas de submissão (a primeira linha de cada usuário segundo Pu) e mover a escolhida para `staged`.
-- [ ] Alocação: para cada linha `staged`, na ordem de Pm, escolher uma máquina elegível (`run_machines`) com menos de k linhas `assigned` e onde ela caiba vazia; gravar `assigned` e `machine`.
+- [ ] Migração: tabela groups (id, nome) com o grupo padrão "ampla concorrência" criado na própria migração, e users.group\_id apontando para ele; cada usuário em exatamente um grupo. O grupo do usuário é gravado na linha quando ela é selecionada, para a análise.
+- [ ] Seleção, por grupo: enquanto a staged do grupo estiver abaixo da capacidade K^int, aplicar Ps às cabeças das filas de submissão dos usuários do grupo (a primeira linha de cada um segundo Pu) e mover a escolhida para staged.
+- [ ] Alocação: percorrer os grupos em round robin, uma linha por vez, guardando de qual grupo foi a última vez e pulando o grupo sem linha staged com máquina elegível com vaga. Na vez do grupo, tomar a linha staged dele na ordem de Pa e vinculá-la a uma máquina elegível (run\_machines) com menos de k linhas assigned, sorteada entre as que têm vaga; gravar assigned e machine. Sem reserva: o encaixe só é checado na promoção.
 - [ ] Promoção: em cada máquina, aplicar Pc às linhas `assigned` com o recurso livre dela e mover as que cabem para `starting`.
 - [ ] Pré-cópia: a goroutine da máquina chama `ensureImage` para linhas `assigned`, não só em `start`.
 - [ ] Casos de borda: máquina removida devolve suas `assigned` para `staged`; run cancelado leva `queued`, `staged` e `assigned` direto a `cancelled`; restart mantém `staged` e `assigned` como estão.
@@ -204,13 +207,13 @@ A decisão sai das goroutines por máquina e vai para uma função pura chamada 
 
 - [ ] Medidas de T̂u para a seleção por PQ: DRF (parcela dominante instantânea, calculada sobre as linhas `starting` e `running`) e fair-share com decaimento (sobre o histórico em `user_usage`). Na fila do DRF, se a próxima tarefa do usuário escolhido não cabe em nenhuma máquina, passar ao próximo usuário, como no caso discreto do artigo.
 
-* [ ] Política de alocação Tetris: escore de alinhamento a(j, c) e parâmetro de justiça f configurável (padrão 0).
+* [ ] Opcional, fora do fatorial: Tetris como política de Pc, com escore de alinhamento a(j, c) entre a linha e o recurso livre da máquina.
 * [ ] Weighted DRF e Asset Fairness como medidas de T̂u; peso por usuário na tela de admin (padrão 1).
 
 - [ ] Implementar as sete políticas sobre a interface da fase 2. SIRO com semente configurável, para que uma rodada possa ser repetida.
 - [ ] Escore s(j, t) com pesos ω1 a ω4 e horizonte H configuráveis.
 - [ ] Tu(t) calculado a partir das linhas terminadas (`cpus × (finished_at − started_at)`) mais as que estão rodando, como parcela dominante com meia-vida h, lido do histórico de uso abaixo.
-- [ ] Configuração de Pu, Pm, Pc, capacidade da intermediária, k e pesos no pacote `setting`, editável pelo admin, lida a cada `tick`.
+- [ ] Configuração de Pu, Ps, Pa, Pc, capacidade da intermediária, k e pesos no pacote `setting`, editável pelo admin, lida a cada `tick`.
 - [ ] Registrar em cada linha a configuração de políticas vigente quando ela foi selecionada, para a análise saber sob qual configuração cada tarefa rodou.
 
 **Histórico de uso por usuário.** Uma tabela `user_usage` (usuário, início do balde de 1 hora, CPU·s, MB·s), alimentada pelo `tick` a partir das linhas em execução. Ela serve a duas coisas: Tu(t) vira uma soma ponderada sobre os baldes, sem varrer todas as linhas, e o usuário passa a ver quanto consumiu ao longo do tempo.
@@ -219,14 +222,15 @@ A decisão sai das goroutines por máquina e vai para uma função pura chamada 
 
 | Configuração | Padrão |
 | --- | --- |
-| Pu, Pm (seleção), Pm (alocação), Pc | FIFO em todas (linha de base) |
-| Capacidade da fila intermediária | 2 × máquinas ativas |
+| Pu, Ps (seleção), Pa (alocação), Pc | FIFO em todas (linha de base) |
+| Capacidade da fila intermediária | 2 × máquinas ativas, por grupo |
 | Profundidade k da fila de execução | 3 |
 | Pesos ω1, ω2, ω3, ω4 | 0, 0, 0, 0 |
 | Horizonte H do aging | a definir |
 | Meia-vida h do consumo | 7 dias |
 | Semente do SIRO | fixa, configurável |
 | εc, εr | por máquina, na tela da máquina |
+| Grupos de usuários | 1 (ampla concorrência), novos criados pelo admin |
 
 ### Fase 5: simulador e métricas
 
@@ -248,6 +252,7 @@ Os estados novos aparecem na API como status de linha (`staged`, `assigned`), e 
 - [ ] Endpoint de métricas: `busy`/`queued` por slot viram CPU e memória alocadas em Ec(t), mais a contagem de linhas `assigned` da máquina.
 - [ ] Endpoint novo `GET /queue`: os três níveis agregados, quantas linhas cada usuário tem em cada um e a parcela de consumo T̂u. Usuário comum vê os próprios números e os totais; admin vê todos.
 - [ ] Configuração das políticas pelo pacote `setting` já existente, exposta na API de settings.
+- [ ] API de grupos (só admin): criar, renomear e remover grupos e mudar o grupo de um usuário; o grupo padrão não pode ser removido, e quem estava num grupo removido volta para ele. GET /queue passa a mostrar as intermediárias por grupo.
 - [ ] Swagger (`docs/`) regenerado.
 
 ### maestro-cli
@@ -258,6 +263,7 @@ Os estados novos aparecem na API como status de linha (`staged`, `assigned`), e 
 - [ ] `maestro top` (`cmd/top.go` e `tui/top.go`): `SlotsInUse` ("2/4 +3") vira alocação de recurso, algo como `6/14 cpu · 20/30G +1`, e o detalhe da máquina mostra a fila de execução dela.
 - [ ] Comando novo `maestro queue`: onde estão as minhas linhas nos três níveis e qual minha parcela de uso. É o que dá ao usuário a sensação de justiça.
 - [ ] Se houver CLI de admin, comando para ver e trocar as políticas.
+- [ ] maestro queue mostra o grupo do usuário e a intermediária dele; para admin, comandos de grupo (listar, criar, mover usuário).
 
 ### maestro-view
 
@@ -265,6 +271,7 @@ Os estados novos aparecem na API como status de linha (`staged`, `assigned`), e 
 - [ ] `RunsDrive.vue`: `ACTIVE` (linha 25), a lista de status (linha 192) e o botão de cancelar (linha 335) ganham os estados novos, com um rótulo legível para cada um.
 - [ ] Página ou painel de fila: os três níveis e a parcela de cada usuário, lendo `GET /queue`.
 - [ ] Tela de admin para as políticas, pesos, k e capacidade da intermediária.
+- [ ] Tela de admin de grupos: lista de grupos, usuários de cada um e ação de mover usuário; o painel de fila separa a intermediária por grupo.
 
 ### maestro-template
 
@@ -280,15 +287,19 @@ Decididas por Gus em 9/11/2026, exceto onde indicado.
 | Decisão | Resultado |
 | --- | --- |
 | Máquinas permitidas por run | Entram no modelo como M(j), restrição xjc = 0 para c ∉ M(j) |
-| Pm com duas etapas ou quatro políticas | Duas etapas de Pm (seleção e alocação); o modelo mantém três políticas |
+| Três ou quatro políticas | Quatro políticas: Pu, Ps (seleção), Pa (alocação) e Pc (decidido na thread de combinações, substitui "Pm com duas etapas") |
 | Destino de `slots` | Removido |
-| Unidade de justiça | Usuário |
+| Unidade de justiça | Usuário, dentro do grupo; entre grupos, vez igual (round robin em Pa) |
 | Decaimento de Tu(t) | Meia-vida configurável, mais histórico de uso por usuário |
 | Tu em CPU·s ou parcela dominante | Parcela dominante (CPU e memória) |
-| Capacidade da intermediária | 2 × máquinas ativas por padrão, configurável pelo admin |
+| Capacidade da intermediária | 2 × máquinas ativas por padrão, para cada grupo, configurável pelo admin |
 | Profundidade k | 3 por padrão, configurável pelo admin |
 | Exposição dos estados novos | Status de linha na API (`staged`, `assigned`) mais campo `active` |
-| Combinações a avaliar | Em aberto, brainstorm em thread separada |
-| Métricas de avaliação | Em aberto, brainstorm em thread separada |
+| Combinações a avaliar | Fatorial completo 4^4 = 256: Pu, Ps e Pa em FIFO, LCFS, SIRO e PQ; Pc em FIFO, PQ, Best-Fit e Weighted Best-Fit (metodologia da tese) |
+| Métricas de avaliação | Função objetivo única Z (tempo de resposta médio dos experimentos + λ\_J·injustiça + λ\_O·ociosidade), com Wq, BSLD e Jain como apoio |
+| Grupos de usuários | Partição dos usuários, cada um em exatamente um grupo; padrão 1 grupo (ampla concorrência); uma intermediária por grupo, sem transbordo |
+| Alocação (Pa) | Round robin entre grupos; sem reserva de recurso, só vincula a uma máquina de M(j) com vaga na fila; empate sorteado; encaixe só em Pc |
+| Máquinas | Capacidades heterogêneas no modelo (estudo de caso idêntico); duração depende da máquina; margens por máquina |
+| Cópia da imagem | Fora do modelo: a fila da máquina (k > 1) esconde o tempo de cópia |
 
-Ainda sem valor: o horizonte H do aging. Uma referência natural é a duração típica de uma tarefa no laboratório, que só os dados de uso vão mostrar.
+Ainda sem valor: o horizonte H do aging. Uma referência natural é a duração típica de uma tarefa no laboratório, que só os dados de uso vão mostrar. Também sem valor: os pesos λ\_J e λ\_O da função objetivo, em horas, definidos pelo admin na avaliação, e se o round robin entre grupos ganha pesos (hoje, vez igual).

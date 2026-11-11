@@ -285,52 +285,73 @@ line, spread over the machines: each line runs once, on whichever allowed
 machine has room for it first. A line waits at three levels before it
 starts: `queued`, among its user's lines; `staged`, chosen from them and
 waiting for a machine; and `assigned`, given to a machine and waiting for
-room on it, while orq copies its image there. Only a few lines are staged at
-a time (twice the machines) and only three wait on each machine, so which
-user's line goes next is decided as late as it can be.
+room on it, while orq copies its image there. Users are in groups, all in
+one open to everyone until an administrator makes others: each group's
+lines are staged apart, only a few at a time (twice the machines, for each
+group), and groups take turns at the machines. Only three lines wait on
+each machine, so which user's line goes next is decided as late as it can
+be.
 
-An administrator sets on the Maestro page, under "Admin panel", how each
-level orders its lines. Until then each takes them in the order they were
-queued, oldest run first, and on a machine a line that doesn't fit yet
-holds back those after it. The policies are FIFO, FIFO-skip (the oldest that
-fits), LCFS, SIRO (random, repeatable with a seed), best-fit, weighted
-best-fit (with how long a line has waited) and PQ, the highest score
-ω1·cores + ω2·memory + ω3·waiting + ω4·share. A user's share of the machines
-is what their lines hold now (DRF, optionally weighted per user) or what
-they used, each hour counting half as much a half-life later (fair-share);
-with ω4 below 0, whoever has less goes first. Staged lines go to the first
-machine where they would start now, or with Tetris to the one whose free
-cores and memory are most like what the line needs. Each line records the
-settings it was staged under.
+An administrator sets on the Maestro page, under "Admin panel", the four
+policies: which of a user's lines is next, whose line is staged among a
+group's users, which of a group's staged lines goes to a machine in the
+group's turn, and which line waiting on a machine starts. Until then each
+takes them in the order they were queued, oldest run first, and on a
+machine a line that doesn't fit yet holds back those after it. The first
+three are FIFO, LCFS, SIRO (random, repeatable with a seed) or PQ, the
+highest score ω1·cores + ω2·memory + ω3·waiting + ω4·share. A user's share
+of the machines is what their lines hold now (DRF, optionally weighted per
+user) or what they used, each hour counting half as much a half-life later
+(fair-share); with ω4 below 0, whoever has less goes first. A staged line
+goes to a machine drawn among those it may use that have room in their
+queue; nothing is kept for it there. Only the machine's own policy fits
+lines in what it has free, so it may also be FIFO-skip (the oldest that
+fits), best-fit, weighted best-fit (with how long a line has waited) or
+Tetris (the line whose needs are most like the free cores and memory). The
+same page has the groups: making, renaming and removing them, and moving
+users between them. Each line records the settings it was staged under,
+and its user's group.
 
 `maestro queue` shows how many lines wait at each level, yours and
-everyone's, and your share; `maestro usage` the core-hours and memory
+everyone's, your group and how many of its lines are staged, and your
+share; `maestro usage` the core-hours and memory
 GB-hours your lines used each day, counted as they end, and `maestro
 settings` how the scheduler is set up. Administrators see every user, and
-the page has the same under "Queue".
+the page has the same under "Queue", where "Lines over a period" also
+downloads what `maestro export` writes and measures it as `sim evaluate`
+does, against what the machines have for lines now.
 
 ### Comparing policies
 
 `maestro export --since 2026-11-01` writes, as CSV, what happened to each
 of your lines over a period (administrators: `--all` for everyone's): when
-it was submitted, staged, assigned, started and finished, where, and under
-which scheduler settings. `sim`, in maestro-orq, measures such a file, or
+it was submitted, staged, assigned, started and finished, where, under
+which scheduler settings and in which group. `sim`, in maestro-orq, measures such a file, or
 makes one by running orq's own scheduler over a workload on a simulated
 clock, so that policies can be compared without the machines:
 
 ```sh
 cd maestro-orq
-go run ./cmd/sim generate -users 4 -hours 8 > workload.csv
+go run ./cmd/sim generate -users 4 -groups 2 -hours 8 > workload.csv
 go run ./cmd/sim run -machines Q1:32:65536:2:4096 -config drf.json < workload.csv > lines.csv
-go run ./cmd/sim evaluate -cpus 30 -memory 61440 < lines.csv
+go run ./cmd/sim evaluate -cpus 30 -memory 61440 -lambda-j 1h -lambda-o 1h < lines.csv
 ```
+
+A workload's `group` column puts each user in a group (1 without it), and a
+machine written with `@speed`, as `Q2:8:16384@1.5`, runs lines that much
+faster: a line's duration depends on the machine.
 
 A config is the scheduler's settings as JSON, as `GET /api/settings` shows
 them under `scheduler` (for instance `{"select": "pq", "share_weight": -1}`
 for DRF); without one, FIFO everywhere. `evaluate` reports the mean wait
 (and how much of it at each level), the mean time in the system, the mean
-bounded slowdown, the utilization of cores and memory, and Jain's index of
-users' slowdowns. A simulated line starts as soon as it is chosen; a real
+bounded slowdown, the utilization of cores and memory, Jain's index of
+users' slowdowns, and the objective Z = F + λ_J·Φ_J + λ_O·Φ_O: F is the
+mean time from a run's submission to the end of its last line, Φ_J the
+mean over time of the gap between the largest and the smallest dominant
+share of the users with lines not finished, and Φ_O the mean over time of
+the fraction of the machines idle while some line waits; `-lambda-j` and
+`-lambda-o` say what a whole unit of each is worth. A simulated line starts as soon as it is chosen; a real
 one first has its image copied and its container created. `maestro run <build> --watch` follows the run
 until it is over, and `maestro build <repo> --run` queues it as soon as the
 image is built; `maestro build <repo> --watch` does both, from a repo to its
