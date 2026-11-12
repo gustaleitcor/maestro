@@ -240,7 +240,14 @@ outputs    = ["out.txt"]                     # copied out when each finishes
 cpus       = 2                               # cores per container; default 1
 memory     = 2048                            # MB per container; default 512
 env        = { SEED = "42" }                 # variables of each container's environment
+dockerfile = "docker/Dockerfile"             # what the image is built from
 ```
+
+`dockerfile` is the file the image is built from, a path from the root of
+the repo, which stays the build's context: its `COPY` lines name files from
+the root, not from beside it. Without it orq builds the `Containerfile` at
+the root, or else the `Dockerfile`. It must be a file inside the repo; a
+symbolic link out of it isn't followed, and a missing one fails the build.
 
 There is always a limit: `cpus` is a whole number of cores, at least 1, and
 `memory` at least 6 MB. They also decide where and when a line runs: a
