@@ -157,6 +157,44 @@ and the machine is looked at again behind it, so the next list has the news.
 Only a machine nobody asked about for 10 minutes is waited for, and editing
 a machine checks it again at once.
 
+### Machines behind a proxy (Cloudflare Access)
+
+A machine that can't be reached over plain TCP, such as one behind
+Cloudflare Access, is reached through a proxy command, as with ssh's
+`ProxyCommand`. orq runs the command and speaks SSH over its standard input
+and output itself, so the host key is still pinned and everything else works
+as for any machine. In the machine's form, set the proxy command to
+
+```
+cloudflared access ssh --hostname %h
+```
+
+with the host set to the Access hostname (e.g. `q1-ssh.example.com`).
+`%h`, `%p` and `%r` become the host, port and user, and `%%` a `%`.
+cloudflared is in orq's image. Under *Proxy environment*, paste the Access
+service token as
+
+```
+TUNNEL_SERVICE_TOKEN_ID=…
+TUNNEL_SERVICE_TOKEN_SECRET=…
+```
+
+(a file of `export NAME=value` lines, such as one you source for ssh, can be
+pasted as it is). Like the private key, it is stored encrypted with
+`MACHINE_SECRET` and never sent back: the page shows only the names, and an
+edit that leaves it empty keeps what is stored. The command gets only
+`PATH`, `HOME` and these variables, none of orq's own environment.
+
+A proxy command runs a program inside orq's container, so it lets any
+administrator run commands on the server. orq refuses them unless
+`MACHINE_PROXY_COMMANDS=true`, and a machine saved with one shows as
+unreachable, saying why, while it is off.
+
+orq doesn't keep connections open: each one, from the runner, a check or
+`maestro top` (one every couple of seconds while someone watches it), starts
+its own cloudflared, which adds half a second to a second to it. If
+cloudflared fails, what it printed is in the machine's error.
+
 ### Watching the machines
 
 `maestro top` shows how loaded every machine is, like `top` or `btop`, one
@@ -185,6 +223,7 @@ lines take and the queue come from orq's own records, and are never that old.
 | Variable | Default | |
 | --- | --- | --- |
 | `MACHINE_SECRET` | empty | Encrypts the stored SSH keys; at least 32 characters. Empty disables machines |
+| `MACHINE_PROXY_COMMANDS` | `false` | Allows machines reached through a proxy command, which runs on the orq server |
 | `OIDC_ADMIN_ROLES` | `ADMIN` | Comma-separated roles (from `OIDC_ROLES_CLAIM`) that make a user an administrator |
 | `ADMIN_EMAILS` | empty | Comma-separated emails that are administrators regardless of roles |
 

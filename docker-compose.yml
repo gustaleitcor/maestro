@@ -30,6 +30,7 @@ services:
       # Users with this role manage the machines containers run on.
       OIDC_ADMIN_ROLES: ADMIN
       MACHINE_SECRET: ${MACHINE_SECRET}
+      MACHINE_PROXY_COMMANDS: ${MACHINE_PROXY_COMMANDS:-false}
     ports:
       - "3005:3005"
 

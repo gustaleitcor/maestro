@@ -43,6 +43,7 @@ services:
       OIDC_ALLOWED_ROLES: "" # Dex users carry no roles; let any of them in
       ADMIN_EMAILS: dev@example.com # so the dev user can manage machines
       MACHINE_SECRET: maestro-dev-machine-secret-not-for-production
+      MACHINE_PROXY_COMMANDS: ${MACHINE_PROXY_COMMANDS:-false} # true to add machines behind Cloudflare Access
     network_mode: host
     depends_on:
       - dex
