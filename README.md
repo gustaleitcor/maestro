@@ -484,7 +484,11 @@ searched by run or repository. A run's lines can be sorted by line, args,
 where they are or how many files they kept: click a column's heading, and
 again to reverse it. Each click on Status puts the next status the lines
 have at the top, from those that are over: cancelled, then error, failed,
-and on round to queued. A file, or either of a line's logs, opens in
+and on round to queued. A line that ends `failed` ran and its program
+exited with an error; one that ends `error` is orq's trouble, most often a
+line that couldn't start on its machine, which the page says and draws
+apart, in amber. Cancelling a run cancels the lines it stops; one that had
+already ended keeps how it ended. A file, or either of a line's logs, opens in
 a pane beside the line's files (a running line's logs are read again every 5
 seconds), or in a tab of its own, and can be downloaded; a line or a
 whole run downloads as a zip, laid out as `maestro runs get` leaves it. Only
