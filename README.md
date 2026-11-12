@@ -360,6 +360,12 @@ group), and groups take turns at the machines. Only three lines wait on
 each machine, so which user's line goes next is decided as late as it can
 be.
 
+A machine orq can't reach, over SSH or to its Podman socket, gets no
+lines until it can: those waiting or about to start there go back to
+`staged`, for another machine, rather than ending in an error, and orq
+tries it again every 30 seconds. Lines already running there are left
+alone, and looked at again once it is back.
+
 An administrator sets on the Maestro page, under Admin › Settings, the four
 policies: which of a user's lines is next, whose line is staged among a
 group's users, which of a group's staged lines goes to a machine in the
@@ -474,7 +480,11 @@ The Maestro page is the same files: it opens on My runs once signed in, as
 Its sidebar leads to My runs, Queue and Usage, and for administrators to All
 users and the Admin pages (Machines, Groups, Settings); on a narrow screen it
 is a rail of icons. My runs can be narrowed to active or finished runs, or
-searched by run or repository. A file, or either of a line's logs, opens in
+searched by run or repository. A run's lines can be sorted by line, args,
+where they are or how many files they kept: click a column's heading, and
+again to reverse it. Each click on Status puts the next status the lines
+have at the top, from those that are over: cancelled, then error, failed,
+and on round to queued. A file, or either of a line's logs, opens in
 a pane beside the line's files (a running line's logs are read again every 5
 seconds), or in a tab of its own, and can be downloaded; a line or a
 whole run downloads as a zip, laid out as `maestro runs get` leaves it. Only
