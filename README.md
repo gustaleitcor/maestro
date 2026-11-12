@@ -486,7 +486,8 @@ The Maestro page is the same files: it opens on My runs once signed in, as
 `<run>/<line>/<file>`, and administrators have everyone's under All users.
 Its sidebar leads to My runs, Queue and Usage, and for administrators to All
 users and the Admin pages (Machines, Groups, Settings); on a narrow screen it
-is a rail of icons. My runs can be narrowed to active or finished runs, or
+is a rail of icons. The page follows the system's light or dark theme until
+the sidebar's toggle picks one, which the browser then keeps. My runs can be narrowed to active or finished runs, or
 searched by run or repository. A run's lines can be sorted by line, args,
 where they are or how many files they kept: click a column's heading, and
 again to reverse it. Each click on Status puts the next status the lines
