@@ -443,7 +443,8 @@ until it is over, and `maestro build <repo> --run` queues it as soon as the
 image is built; `maestro build <repo> --watch` does both, from a repo to its
 results in one command. orq copies the image to a machine the first
 time it needs it there, streaming `podman save` into `podman load` over SSH,
-and leaves it there when the run is over, so the next run of that build starts
+gzipped on the way, which takes an image's layers to about a third, and
+leaves it there when the run is over, so the next run of that build starts
 without copying it again.
 
 Each user keeps at most 10 built images (an administrator can change the
