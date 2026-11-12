@@ -222,6 +222,23 @@ names may not start with `MAESTRO_`:
 
 A limit on CPUs doesn't change how many cores a program sees, so a solver
 should size itself by `MAESTRO_CPUS`: `threads = int(os.environ["MAESTRO_CPUS"])`.
+On a machine whose Podman can't limit CPU, a rootless one whose user
+systemd doesn't hand the `cpu` cgroup controller (Ubuntu 22.04's default),
+lines still count their `cpus` there, but nothing holds them to it: one
+that takes more slows the others down. To have the limit, an administrator
+of the machine gives users the controller once:
+
+```sh
+sudo mkdir -p /etc/systemd/system/user@.service.d
+printf '[Service]\nDelegate=cpu cpuset io memory pids\n' |
+  sudo tee /etc/systemd/system/user@.service.d/delegate.conf
+sudo systemctl daemon-reload
+```
+
+and the Podman user signs out of every session (or the machine restarts),
+so that its systemd starts again with it. `podman info` then lists `cpu`
+under `cgroupControllers`.
+
 The environment is kept with the run and shown by `podman inspect` on the
 machine, so `env` is no place for secrets.
 
