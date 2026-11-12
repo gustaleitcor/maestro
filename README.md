@@ -118,10 +118,13 @@ orq names it, for scripts. Removing is `rm` everywhere (`builds rm`,
 ## Git forges
 
 Forges are separate from signing in: they never log anyone in. A forge is
-only its API plus a read-only token, which the CLI stores (`maestro forges
-add`) and passes to orq per build so it can clone. Supported kinds:
+only its API plus a token, which the CLI stores (`maestro forges add`) and
+passes to orq per build so it can clone. Maestro only reads with it.
+Supported kinds:
 
-- `github` — github.com
+- `github` — github.com, with a classic token with the `repo` scope. A
+  fine-grained token only reaches the repos of the one owner it is made for,
+  so never another user's private repo you are a collaborator on.
 - `forgejo` — Codeberg by default, or any Forgejo or Gitea instance with `--url`
 - `gitlab` — gitlab.com, including nested groups
 
