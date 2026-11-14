@@ -60,6 +60,15 @@ services:
     volumes:
       - ./maestro-view/dist:/app/dist
 
+  # builds the book into ./book/dist and exits - use `mdbook serve book` to
+  # edit it with live reload
+  docs:
+    build:
+      context: .
+      dockerfile: book/Dockerfile
+    volumes:
+      - ./book/dist:/out:z
+
 volumes:
   maestro-orq-dev-data:
   maestro-orq-dev-runs:
