@@ -105,14 +105,20 @@ the `.tar.gz` holds the same binary, which needs nothing else.
 code there hands the CLI its own Maestro key. The link is not opened for
 you, so it can be followed in any browser, on that machine or another.
 
+The CLI has no server of its own: the first time a command needs one and
+nothing names it, `maestro` asks for the server's URL (`https://` is assumed
+when it says no scheme) and keeps it, before doing anything else. Without a
+terminal to ask at, as in a script, it says how to name one instead.
 `maestro login --server https://maestro.example.org` signs in to another
 Maestro, which every command then talks to; `--server` on any command talks
 to one just that once, and `MAESTRO_ORQ_URL` does the same from the
-environment (the flag first, then the variable, then the server signed in
-to). The CLI keeps the server with the key and never sends the key to
-another: a command pointed at a server the key wasn't minted by is told to
-sign in there. A key stored by a CLI from before goes anywhere, as it did.
-`maestro` alone says who is signed in, where, and to which forges.
+environment (the flag first, then the variable, then the server kept). The
+CLI keeps the server with the key and never sends the key to another: a
+command pointed at a server the key wasn't minted by is told to sign in
+there. A key stored by a CLI from before, with no server kept beside it,
+asks for the server once and then goes to it. `maestro logout` forgets the
+server too. `maestro` alone says who is signed in, where, and to which
+forges.
 
 `maestro --help` lists the commands by what they are for, and
 `maestro help concepts` says what builds, runs, lines and containers are,
