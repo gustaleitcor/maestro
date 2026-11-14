@@ -529,8 +529,8 @@ exited with an error; one that ends `error` is orq's trouble, most often a
 line that couldn't start on its machine, or one whose machine restarted
 while it ran there and so lost its container, which the page says and draws
 apart, in amber. Cancelling a run cancels the lines it stops; one that had
-already ended keeps how it ended. A line's page says all it runs with, as its
-container got it: its cores and memory, its command, its environment (its
+already ended keeps how it ended. A line's page opens on its files; its
+Details button shows all it runs with, as its container got it: its cores and memory, its command, its environment (its
 `env`, then orq's `MAESTRO_` variables), the files kept from it, its
 container's name, the image and commit, and when it was queued, staged,
 assigned, started and finished, with how long it waited and ran. A file, or
