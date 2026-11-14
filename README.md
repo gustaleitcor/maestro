@@ -498,7 +498,8 @@ again to reverse it. Each click on Status puts the next status the lines
 have at the top, from those that are over: cancelled, then error, failed,
 and on round to queued. A line that ends `failed` ran and its program
 exited with an error; one that ends `error` is orq's trouble, most often a
-line that couldn't start on its machine, which the page says and draws
+line that couldn't start on its machine, or one whose machine restarted
+while it ran there and so lost its container, which the page says and draws
 apart, in amber. Cancelling a run cancels the lines it stops; one that had
 already ended keeps how it ended. A file, or either of a line's logs, opens in
 a pane beside the line's files (a running line's logs are read again every 5
