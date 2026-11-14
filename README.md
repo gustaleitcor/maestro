@@ -519,7 +519,8 @@ Its sidebar leads to My runs, Queue and Usage, and for administrators to All
 users and the Admin pages (Machines, Groups, Settings); on a narrow screen it
 is a rail of icons. The page follows the system's light or dark theme until
 the sidebar's toggle picks one, which the browser then keeps. My runs can be narrowed to active or finished runs, or
-searched by run or repository. A run's lines can be sorted by line, args,
+searched by run or repository. A run's lines show the cores and memory
+each asked for, and can be sorted by line, args, those,
 where they are or how many files they kept: click a column's heading, and
 again to reverse it. Each click on Status puts the next status the lines
 have at the top, from those that are over: cancelled, then error, failed,
@@ -528,7 +529,12 @@ exited with an error; one that ends `error` is orq's trouble, most often a
 line that couldn't start on its machine, or one whose machine restarted
 while it ran there and so lost its container, which the page says and draws
 apart, in amber. Cancelling a run cancels the lines it stops; one that had
-already ended keeps how it ended. A file, or either of a line's logs, opens in
+already ended keeps how it ended. A line's page says all it runs with, as its
+container got it: its cores and memory, its command, its environment (its
+`env`, then orq's `MAESTRO_` variables), the files kept from it, its
+container's name, the image and commit, and when it was queued, staged,
+assigned, started and finished, with how long it waited and ran. A file, or
+either of a line's logs, opens in
 a pane beside the line's files (a running line's logs are read again every 5
 seconds), or in a tab of its own, and can be downloaded; a line or a
 whole run downloads as a zip, laid out as `maestro runs get` leaves it. Only
