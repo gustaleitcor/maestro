@@ -244,7 +244,18 @@ cpus       = 2                               # cores per container; default 1
 memory     = 2048                            # MB per container; default 512
 env        = { SEED = "42" }                 # variables of each container's environment
 dockerfile = "docker/Dockerfile"             # what the image is built from
+outputs_layout = "per-line"                  # or "shared": see below
 ```
+
+`outputs_layout` is where the outputs are kept. With `per-line`, the
+default, each line's go in a directory of its own, `<run>/<line>/<path>`.
+With `shared`, every line's go in one tree of the run's, `<run>/shared/<path>`,
+as a program that has its lines fill in one results tree expects:
+`results/<month>/<day>/...` from all of them, downloaded as one. Two lines
+writing the same path overwrite each other, the one kept last winning, so
+each line should write paths of its own. Logs stay per line either way, and
+`maestro runs get` and the run's download give the shared tree once, under
+`shared/`.
 
 `dockerfile` is the file the image is built from, a path from the root of
 the repo, which stays the build's context: its `COPY` lines name files from
@@ -337,7 +348,8 @@ def genvrs() -> Generator[str]:
 `machines` is set in `maestro.toml` only, the same for every line. Any other
 name in `Config`, `machines` included, fails the build, so that a misspelt
 key isn't ignored. A run lists the outputs of all its lines together; each
-line keeps only its own.
+line keeps only its own, or, with `outputs_layout = "shared"`, writes them
+into the run's shared tree.
 
 orq runs the script once, when it builds the repo, and the build keeps the
 lines it gave: every run of that build is the same lines. It is run inside
@@ -492,7 +504,13 @@ wrote, then removes it:
 /maestro/data/<user>/<run>/<line>/stdout.log
 /maestro/data/<user>/<run>/<line>/stderr.log
 /maestro/data/<user>/<run>/<line>/<file>
+/maestro/data/<user>/<run>/shared/<file>     (with outputs_layout = "shared")
 ```
+
+orq creates each container with Podman's file log driver (`k8s-file`),
+whatever the machine's default: on a machine whose default is journald, the
+user Podman runs as may not be allowed to read the journal, and the logs
+came back empty.
 
 stdout and stderr are kept apart, each in its own file, in the line's folder
 with its outputs. An output named `stdout.log` or `stderr.log` isn't kept:
@@ -533,7 +551,12 @@ already ended keeps how it ended. A line's page opens on its files; its
 Details button shows all it runs with, as its container got it: its cores and memory, its command, its environment (its
 `env`, then orq's `MAESTRO_` variables), the files kept from it, its
 container's name, the image and commit, and when it was queued, staged,
-assigned, started and finished, with how long it waited and ran. A file, or
+assigned, started and finished, with how long it waited and ran. A line's
+files show as folders, not as a list of long paths: paths that share a
+prefix go under a folder of it, a chain of folders that each hold only the
+next shows as one (`results/7/1/0.01_0.01`), and a folder folds with a
+click. A run whose outputs are shared also has its tree on its own page,
+every line's files merged, each saying which line wrote it. A file, or
 either of a line's logs, opens in
 a pane beside the line's files (a running line's logs are read again every 5
 seconds), or in a tab of its own, and can be downloaded; a line or a
