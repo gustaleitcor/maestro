@@ -46,14 +46,15 @@ services:
     volumes:
       - ./maestro-view/dist:/app/dist
 
-  # builds the book (`maestro docs`) into ./book/dist and exits; Caddy serves
-  # that directory at /docs/, beside the view.
+  # builds the book into ./maestro-cli/book/dist and exits; Caddy serves that
+  # directory at /docs/, beside the view, for its Docs link and `maestro docs
+  # --web`. `maestro docs` alone opens the copy the CLI carries.
   docs:
     build:
-      context: .
+      context: ./maestro-cli
       dockerfile: book/Dockerfile
     volumes:
-      - ./book/dist:/out:z
+      - ./maestro-cli/book/dist:/out:z
 
 volumes:
   maestro-orq-data:

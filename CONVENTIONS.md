@@ -130,6 +130,8 @@ internal/maestroapi  the client of orq's API: types and requests
 internal/forge       the clients of the git forges
 internal/config      what is stored on this computer
 internal/humanize    bytes, rates, durations and percentages as text
+internal/book        the book, as the binary carries it, and unpacking it
+book/                the Maestro book (mdBook), and build.sh, which packs it
 ```
 
 - **`cmd`** is cobra. A command's file has its `cobra.Command`, its `run…`
@@ -189,10 +191,10 @@ src/style.css        the colours, and every class more than one component uses
 - Comments say why, or what isn't obvious; none restate the code. Their
   voice is the one already there: plain, about what the thing is.
 - Names follow the surrounding code before any outside style guide.
-- A behaviour a user or an administrator can see is in the book, `book/src`,
-  on the page that explains that part of Maestro; each repo's README says
-  what that repo is. A page moved or renamed moves in the topics of
-  `maestro-cli/cmd/docs.go` too.
+- A behaviour a user or an administrator can see is in the book,
+  `maestro-cli/book/src`, on the page that explains that part of Maestro;
+  each repo's README says what that repo is. A page moved or renamed moves
+  in the topics of `maestro-cli/cmd/docs.go` too.
 - `go build ./... && go vet ./... && go test ./...` in orq and the CLI, and
   `npm run build` in the view, before saying a change is done.
 - Commits carry no AI attribution lines, and submodules are bumped only when

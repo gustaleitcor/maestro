@@ -3,22 +3,22 @@
 Deployment glue for the Maestro ecosystem: `maestro-cli`, `maestro-orq`, and
 `maestro-view` each live in their own repo (as git submodules here) and are
 developed/versioned independently. This repo only holds what ties them
-together at runtime, and the book that explains them.
+together at runtime.
 
-**The documentation is the Maestro book, in [`book/`](book/src/SUMMARY.md).**
-A deployment serves it at `/docs/`; `maestro docs` opens it, and
-`maestro docs <topic>` a page of it (`maestro docs toml`, `maestro docs
-queue`, `maestro docs runs logs`). What a user, an administrator or a
-contributor needs to know goes there, not here.
+**The documentation is the Maestro book, in
+[`maestro-cli/book`](maestro-cli/book/src/SUMMARY.md).** Every `maestro`
+carries it: `maestro docs` opens it offline, and `maestro docs <topic>` a
+page of it (`maestro docs toml`, `maestro docs queue`, `maestro docs runs
+logs`). A deployment can also serve it at `/docs/`. What a user, an
+administrator or a contributor needs to know goes there, not here.
 
 ## Layout
 
-- `maestro-cli/` — Cobra CLI (submodule)
+- `maestro-cli/` — Cobra CLI, and the book in `maestro-cli/book` (submodule)
 - `maestro-orq/` — Gin + SQLite backend (submodule)
 - `maestro-view/` — Vue frontend (submodule)
 - `maestro-template/` — a repo for users to fork: a stress test of the
   scheduler, with a Dockerfile, `maestro.toml` and a generator (submodule)
-- `book/` — the Maestro book (mdBook), built by `book/Dockerfile`
 - `docker-compose.yml` — production stack
 - `docker-compose-dev.yml` — local dev stack, with its own throwaway identity
   provider (Dex, configured by `dev/dex.yaml`)
@@ -26,9 +26,9 @@ contributor needs to know goes there, not here.
 - `CONVENTIONS.md` — where code goes in each repo; read it before adding a file
 
 `orq` stays up as a server. `view` and `docs` build `maestro-view` and the
-book into `maestro-view/dist` and `book/dist` and exit — Caddy is expected to
-serve those directories directly (the book at `/docs/`), not proxy to a
-container.
+book into `maestro-view/dist` and `maestro-cli/book/dist` and exit — Caddy is
+expected to serve those directories directly (the book at `/docs/`), not
+proxy to a container.
 
 ## Getting started
 
@@ -53,16 +53,18 @@ same Dex for your browser and for orq.
 ## The book
 
 ```sh
-go -C maestro-cli run . gen-docs ../book/src/reference/cli.md   # the CLI reference
-mdbook-mermaid install book                                     # once: the diagrams' scripts
-mdbook serve book                                               # http://localhost:3000
+cd maestro-cli
+sh book/build.sh     # build it, and pack it for the next go build to embed
+mdbook serve book    # or edit it with a live preview on :3000
 ```
 
-`MAESTRO_DOCS_URL=http://localhost:3000` points `maestro docs` at it. A page
-moved or renamed must move in `maestro-cli/cmd/docs.go` too, where each topic
-of `maestro docs` names its page: `book/Dockerfile` fails the build while one
-points nowhere. A change to what Maestro does is documented in the book, in
-the same change.
+`book/build.sh` downloads mdbook and mdbook-mermaid into `~/.cache` when they
+aren't installed, and goreleaser runs it before every release, so a release
+built here carries the book. `MAESTRO_DOCS_URL=http://localhost:3000` points
+`maestro docs` at the live preview. A page moved or renamed must move in
+`maestro-cli/cmd/docs.go` too, where each topic of `maestro docs` names its
+page; `go test ./cmd` fails while one points nowhere. A change to what
+Maestro does is documented in the book, in the same change.
 
 ## Production
 
@@ -73,5 +75,6 @@ podman compose up --build -d
 
 The reverse proxy must send `/api/*` on the view's host to orq (port 3005),
 so that `OIDC_REDIRECT_URL` reaches it and the session cookie is first-party,
-and serve `book/dist` at `/docs/`. The book's [Deploying
-Maestro](book/src/admin/deploy.md) has a Caddyfile.
+and serve `maestro-cli/book/dist` at `/docs/` for the view's Docs link and
+`maestro docs --web`. The book's [Deploying
+Maestro](maestro-cli/book/src/admin/deploy.md) has a Caddyfile.

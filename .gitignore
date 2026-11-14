@@ -1,7 +1,1 @@
 .env
-
-# The book, as built, and what its build writes into it.
-book/dist
-book/mermaid.min.js
-book/mermaid-init.js
-book/src/reference/cli.md
