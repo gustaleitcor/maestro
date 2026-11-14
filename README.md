@@ -538,9 +538,14 @@ either of a line's logs, opens in
 a pane beside the line's files (a running line's logs are read again every 5
 seconds), or in a tab of its own, and can be downloaded; a line or a
 whole run downloads as a zip, laid out as `maestro runs get` leaves it. Only
-png, jpeg, gif and webp images, PDFs and text are shown. Whatever else is
-text, an html page or an svg a container wrote included, is shown as its
-source and never run; the rest can only be downloaded.
+png, jpeg, gif and webp images, PDFs and text are shown; the rest can only
+be downloaded. Text is highlighted by its extension (Python, JSON, TOML,
+YAML, shell, C/C++, Go, Rust, Julia, R, SQL, Markdown, HTML/XML and more),
+and some of it is drawn, with its source a click away: a CSV as a table, an
+SVG as an image (which runs none of its scripts), and an HTML page, such as
+a chart, in a sandbox. The sandbox runs the page's scripts, so that its
+charts draw, in an origin of its own: it can't read your session, call orq as
+you or move the Maestro page.
 
 orq keeps everything about runs in its database, so it can restart mid-run:
 lines it was about to start are started again, containers it started are

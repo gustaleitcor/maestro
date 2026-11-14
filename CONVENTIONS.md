@@ -171,9 +171,15 @@ src/style.css        the colours, and every class more than one component uses
   `.pill`, `.row`, `.top`), and its colours are the tokens at the top of it;
   one used by a single component stays in its `<style scoped>`. Icons are
   `EntryIcon`, not a font or an image.
-- What a file is, and whether it may be shown, is decided by orq. The view
-  never runs or renders what a container wrote as part of the page.
-- No new dependencies without asking: it is Vue and Vite.
+- What a file is, and whether it may be shown, is decided by orq, which
+  serves anything that is text as plain text. What a container wrote is
+  never part of the page: text is shown as text, or highlighted by
+  highlight.js, which escapes it; an SVG only as an `<img>`, which runs no
+  script; and an HTML page only in an iframe sandboxed with `allow-scripts`
+  and nothing else, so that it runs in an origin of its own and can't read
+  the session, call orq as whoever looks, or move the page (`FilePreview`).
+- No new dependencies without asking: it is Vue, Vite and highlight.js
+  (its core, and only the languages `FilePreview` registers).
 
 ## Everywhere
 
