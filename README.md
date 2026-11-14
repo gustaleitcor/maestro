@@ -545,7 +545,8 @@ and some of it is drawn, with its source a click away: a CSV as a table, an
 SVG as an image (which runs none of its scripts), and an HTML page, such as
 a chart, in a sandbox. The sandbox runs the page's scripts, so that its
 charts draw, in an origin of its own: it can't read your session, call orq as
-you or move the Maestro page.
+you or move the Maestro page. Any preview goes full screen, and a drawn one
+opens in a tab of its own drawn the same way, sandbox included.
 
 orq keeps everything about runs in its database, so it can restart mid-run:
 lines it was about to start are started again, containers it started are

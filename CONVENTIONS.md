@@ -178,6 +178,9 @@ src/style.css        the colours, and every class more than one component uses
   script; and an HTML page only in an iframe sandboxed with `allow-scripts`
   and nothing else, so that it runs in an origin of its own and can't read
   the session, call orq as whoever looks, or move the page (`FilePreview`).
+  The same holds in a tab of its own: what opens there is a page of the
+  view's that draws it the same way, never the file as a blob, which would
+  run as the view.
 - No new dependencies without asking: it is Vue, Vite and highlight.js
   (its core, and only the languages `FilePreview` registers).
 
