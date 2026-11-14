@@ -105,12 +105,42 @@ the `.tar.gz` holds the same binary, which needs nothing else.
 code there hands the CLI its own Maestro key. The link is not opened for
 you, so it can be followed in any browser, on that machine or another.
 
+`maestro login --server https://maestro.example.org` signs in to another
+Maestro, which every command then talks to; `--server` on any command talks
+to one just that once, and `MAESTRO_ORQ_URL` does the same from the
+environment (the flag first, then the variable, then the server signed in
+to). The CLI keeps the server with the key and never sends the key to
+another: a command pointed at a server the key wasn't minted by is told to
+sign in there. A key stored by a CLI from before goes anywhere, as it did.
+`maestro` alone says who is signed in, where, and to which forges.
+
+`maestro --help` lists the commands by what they are for, and
+`maestro help concepts` says what builds, runs, lines and containers are,
+and how a line waits. A build has a number shown as `#12`, a run one of its
+own shown as `run 31`: `maestro run 12` runs build #12, and
+`maestro builds run 12` is the same.
+
 What there is several of has a command in the plural, which lists when given
 nothing else: `maestro builds`, `runs`, `machines`, `repos` and `forges` are
 their `list`. Each list takes `--json`, which prints what the table shows, as
 orq names it, for scripts. Removing is `rm` everywhere (`builds rm`,
-`runs rm`, `forges rm`). The names from before still work: `image`,
+`runs rm`, `forges rm`), which asks first; without a terminal to ask at, as
+in a script, it takes `--yes`. The names from before still work: `image`,
 `machine`, `repo`, `forge`, and `remove` for `rm`.
+
+For scripts, `maestro build` and `maestro run` take `--json`, which prints
+what they made, or `-q`, which prints only its number; either keeps stdout
+for that, and what they say along the way goes to stderr:
+
+```sh
+run=$(maestro run 12 -q) && maestro runs show "$run" --watch
+```
+
+`maestro` exits 0 when all went well; 1 when something failed, a run watched
+to its end with `--watch` that failed or was cancelled included; 2 when a
+command was asked wrongly, which it says before asking the server anything,
+signed in or not; and 130 when ctrl-c stopped it first. `--no-color` (or
+`NO_COLOR=1`) prints without colours.
 
 `maestro repos` is a full-screen list on a terminal; piped somewhere, or with
 `--json`, it prints every forge's repositories once.
@@ -448,8 +478,9 @@ machines have for lines now.
 
 ### Comparing policies
 
-`maestro export --since 2026-11-01` writes, as CSV, what happened to each
-of your lines over a period (administrators: `--all` for everyone's): when
+`maestro export --since 2026-11-01` (or `--since 7d`) writes, as CSV, what
+happened to each of your lines over a period (administrators: `--all` for
+everyone's; `-o` writes a file only once the export worked): when
 it was submitted, staged, assigned, started and finished, where, under
 which scheduler settings and in which group. `sim`, in maestro-orq, measures such a file, or
 makes one by running orq's own scheduler over a workload on a simulated
@@ -516,20 +547,32 @@ stdout and stderr are kept apart, each in its own file, in the line's folder
 with its outputs. An output named `stdout.log` or `stderr.log` isn't kept:
 the log always is. `maestro runs logs <run> <line>`
 prints the first to stdout and the second to stderr, so `2>/dev/null` or
-`>/dev/null` leaves just one. All of stdout comes before all of stderr: how
-the two were mixed as the container ran isn't kept. Runs from before this
-have both in one `<line>.log` beside the line's folder, and are still read
-as they are.
+`>/dev/null` leaves just one; the line may be left out of a run of one. Once
+a line is over, all of stdout comes before all of stderr: how the two were
+mixed as the container ran isn't kept. Runs from before this have both in
+one `<line>.log` beside the line's folder, and are still read as they are.
+
+`maestro runs logs <run> <line> -f` follows a line as `tail -f` does: one
+still waiting is waited for, and what a running line prints comes as it is
+printed, until the line ends. orq reads it from the machine with
+`GET /runs/{id}/lines/{line}/logs?follow=true`, which streams until the
+container exits; an orq from before follow answers what there is so far,
+and the CLI says so.
 
 `maestro runs list|show|logs|get|cancel|rm` are for following a run and
-fetching what it kept. `maestro runs show` without a run shows your newest.
+fetching what it kept. `maestro runs list` shows your newest 20 runs
+(`--limit`, 0 for all), of a `--status` or a `--repo` if asked, created so
+long ago. `maestro runs show` without a run shows your newest; `--failed`
+shows only the lines that failed, errored or were cancelled.
 `maestro runs list --watch` and
 `maestro runs show <run> --watch` draw themselves again every 2 seconds
 (`--interval`) in place, without taking over the terminal; `show --watch`
-ends by itself when the run does, and ctrl-c ends either. Piped somewhere,
-they print a new copy only when something changed. `--json` prints once, so
-it can't be used with `--watch`. `maestro runs list --all` gives an
-administrator everyone's runs, with whose each is.
+ends by itself when the run does, says on its status line how it ended, and
+exits 1 if it failed; ctrl-c ends either. Piped somewhere, they print a new
+copy only when something changed. `--json` prints once, so it can't be used
+with `--watch`. `maestro runs list --all` gives an administrator everyone's
+runs, with whose each is. `maestro runs get` takes `--line` for some lines
+only, and downloads over a run already downloaded only with `--force`.
 
 The Maestro page is the same files: it opens on My runs once signed in, as
 `<run>/<line>/<file>`, and administrators have everyone's under All users.
