@@ -876,13 +876,18 @@ Book: `admin/sim.md`.
 
 ### For users
 
-#### P4. A run's failed lines are run again
+#### P4. A run's lines are run again, the failed ones or the ones named
 
 Add `maestro runs retry <run>`, which queues a new run of the same build
 with some of the old run's lines, each with the arguments, cores, memory,
 environment and outputs it had. `--failed` takes the lines that failed,
 ended in an error or were cancelled, and is what it does when no line is
-named; `--line n` (again for more) takes those. It takes `--watch`, `-q`
+named. `--line n` (again for more) takes exactly those lines, whatever
+their status, so that one line that succeeded can be run again too:
+`maestro runs retry 31 --line 2`. A line that is still waiting or running
+is refused, with its status. In the new run the lines keep the numbers they
+had, so that line 2 of the retry is line 2 of run 31. On the page, a line's
+details have a "Run again" button that does the same for that line. It takes `--watch`, `-q`
 and `--json` as `maestro run` does. orq: `POST /api/runs/:id/retry` and a
 `Retry` method in `container`, which refuses with `apierr.Conflict` when the
 build no longer has its image ("build #12 no longer has its image; build it
