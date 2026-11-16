@@ -964,6 +964,118 @@ change with a third resource. What it will touch, for whoever plans it:
 `maestro.toml`, how Podman is given a device (`podman.CreateContainer`),
 usage and the export.
 
+#### P11. One line is cancelled
+
+`maestro runs cancel 31` stops a whole run. Add `--line n` (again for
+more), which cancels those lines and leaves the rest: a line still waiting
+ends as `cancelled` at once, and a running one is stopped by the runner the
+way a cancelled run's lines are, with its logs and outputs kept. A line
+already over is refused, with its status. orq: `POST
+/api/runs/:id/lines/:line/cancel` and a method in `container`; a migration
+marks the line, since today only a run is marked cancelled. On the page, a
+line's details have a "Cancel" button. Book: `use/runs.md`.
+
+#### P12. A user holds at most so many cores
+
+Add `user_max_cpus` to `setting`, changed from Admin › Settings, 0 by
+default, which means no ceiling. In `sched`, a user's head isn't a candidate
+in a turn while the cores of their lines assigned, starting and running,
+with the head's, would be over it; other users' heads go as usual. The
+snapshot carries the ceiling, so the simulator obeys it too (`sim run
+-user-max-cpus`). `maestro settings` shows it, and `maestro queue` says
+when the caller is at it. Add the rule to [The queues](#the-queues) in the
+same change. Book: `how/queue.md`, `admin/policies.md`.
+
+#### P13. What administrators change is written down
+
+Nothing records who changed the scheduler's settings, moved a user, edited
+a machine or revoked keys, or when. Add a table of administrators' actions
+(who, when, what, and the old and new values as JSON), written by the
+service that makes each change, in the same transaction where there is one.
+It is a new package, `audit`, because it belongs to no resource: every
+resource writes to it. `GET /api/admin/actions`, newest first, and a
+History section in the page's Admin. The export gains nothing, but a
+period measured for the thesis can be cut where the settings changed.
+Book: `admin/policies.md`.
+
+## The thesis
+
+Maestro is its author's final project in computer engineering. This is how
+the text of the thesis is written, by whoever helps write it.
+
+### The claim
+
+Every section is tested against one sentence. As it stands:
+
+> A scheduler of three queues with configurable policies lets a small
+> shared lab cluster run containerized experiments with less waiting and
+> fairer sharing than first come, first served, and a simulator that runs
+> the same scheduler predicts how it behaves.
+
+A section that neither supports nor qualifies it is shortened or moved to
+an appendix. When the results change the claim, the sentence is changed
+first and the sections after it.
+
+### What each chapter answers
+
+1. Introduction. What problem a lab has today, who it hurts, and what is
+   delivered. It ends with the general objective, three or four specific
+   ones, and the contributions as a list. Each specific objective has a
+   section of results that answers it.
+2. Background. Only what the model needs: online scheduling without
+   knowing how long a task runs; the queue policies used; fairness over
+   several resources (DRF); the measures (waiting time, bounded slowdown,
+   utilization, Jain's index). Each symbol is defined once, in a table of
+   notation.
+3. Related work. Slurm, HTCondor and Kubernetes as systems; DRF, Tetris and
+   Choosy as policies. It closes with a table of what each offers and what
+   Maestro does differently, and one paragraph on why a lab wouldn't just
+   use Slurm.
+4. The model. Users, groups, machines and lines; the three queues and the
+   policy of each; the score and how it is normalized. It matches `sched`
+   name for name, and [The queues](#the-queues) above.
+5. The system. The architecture in one diagram, then the decisions that
+   mattered: the scheduler kept pure and shared with the simulator; what
+   orq knows kept in its database, so that it restarts in the middle of a
+   run; how someone else's code is contained; how machines are reached. The
+   CLI, the page and the book get a short section or an appendix.
+6. Method. The workloads, exported from real use and generated; the
+   machines; the factors of the experiment and their levels; the seeds; the
+   measures; and how the simulator was checked against the real cluster
+   (P1).
+7. Results. One question in each subsection, which opens with its answer
+   and then shows the figure. Effects are given as sizes with units, not
+   only as which policy won.
+8. Conclusion. What the evidence supports, the limits (few users, machines
+   all alike, no GPUs, no estimate of how long a line runs), and what comes
+   next.
+
+### While writing
+
+- The order of writing is the model, the method, the results, the system,
+  related work, the introduction, then the abstract.
+- A figure's or a table's caption says what the reader should conclude from
+  it.
+- A claim about waiting, utilization or fairness points to a measurement. A
+  claim about the code points to a package.
+- The experiments name the commit of each repository they ran on, tagged,
+  and an appendix gives the commands that run them again (P3).
+- The limits are stated by the author, in the text.
+- A feature isn't listed. A decision is described: what was chosen, what
+  was turned down, and why.
+- The words are the glossary's and this file's, in the thesis's language:
+  one word for each thing, the same in the model, the code and the figures.
+
+### What the examiners will ask
+
+- Why three queues, and what the dispatcher queue gives that one queue for
+  everyone doesn't.
+- Why nothing is kept for a line when it is dispatched, and what that costs
+  a large line.
+- How it is known that the simulator matches the cluster.
+- What becomes of fairness when a user's lines fit only some machines.
+- How one user's code is kept from harming another's, or the server.
+
 ## Before finishing a change
 
 - [ ] No file was added where an existing one already holds that kind of thing.
