@@ -823,6 +823,142 @@ search. Behaviour and classes stay as they are.
 (5.6 MB, untracked) and the worktree at `.claude/worktrees/docs-book` are
 the owner's to remove: ask, don't delete.
 
+## To build
+
+What Maestro doesn't do yet and should. These come after
+[Not followed yet](#not-followed-yet), in the order given within a group,
+one change and one commit each, and each is removed from this list in the
+commit that finishes it. Each says where its code goes; the rules above hold
+for it as for any change. If an item can't be done as written, stop and say
+why.
+
+### For the thesis
+
+#### P1. The simulator replays what really happened
+
+`cmd/sim` generates a workload, runs it and evaluates it, but can't take
+the lines of a real period. Add `sim replay`: it reads an export
+(`maestro export`, read by `evaluation.Read`), makes a job of each line that
+ran (its user, group, cores, memory, when it was submitted, and how long it
+ran, from started to finished), and runs them through `simulate` on the
+machines and policies given as `sim run` takes them. Lines that never ran
+are left out, and it says how many. Add `sim compare a.csv b.csv`, which
+prints the two evaluations side by side with the difference in each measure.
+The conversion goes in `simulate/workload.go`. Book: `admin/sim.md`, with
+the steps to check the simulator against a real week. Done when a test shows
+that a simulation's own export, replayed on the same machines with the same
+policies and seed, gives every line the same wait.
+
+#### P2. A line says how long it may run
+
+Add `time` to `maestro.toml`, with the keys a generator's `Config` may
+change for each line (`choices` in `container/config.go`): a duration such
+as "90m" or "2h", at most the server's `RUN_MAX_HOURS`, which is also what a
+line gets when it names none. It is stored with the line (a migration adds
+the column), shown by `maestro runs show` and the page's line details, given
+to the container as `MAESTRO_TIME` in seconds, and enforced in
+`runner.check` the way L1 enforces the server's limit, with the note
+"stopped after 2h, the time this line asked for". `sched.Task` gains the
+limit, so that a policy can read it. Do this after L1. Book:
+`repo/maestro-toml.md`, `reference/maestro-toml.md`, `repo/container.md`,
+`use/runs.md`. No policy uses the limit in this change: shortest-first and
+backfilling are added to the model by its owner first, in
+[The queues](#the-queues), and then built.
+
+#### P3. One command runs the whole comparison
+
+Add `sim grid`: given a workload, the machines, and lists of policies for
+each queue, of share measures and of seeds, it runs every combination and
+writes one CSV row for each, with the settings and every measure
+`evaluation.Evaluate` gives. The same arguments write the same file. It
+goes in `cmd/sim` and `simulate`; the figures are the thesis's own to draw.
+Book: `admin/sim.md`.
+
+### For users
+
+#### P4. A run's failed lines are run again
+
+Add `maestro runs retry <run>`, which queues a new run of the same build
+with some of the old run's lines, each with the arguments, cores, memory,
+environment and outputs it had. `--failed` takes the lines that failed,
+ended in an error or were cancelled, and is what it does when no line is
+named; `--line n` (again for more) takes those. It takes `--watch`, `-q`
+and `--json` as `maestro run` does. orq: `POST /api/runs/:id/retry` and a
+`Retry` method in `container`, which refuses with `apierr.Conflict` when the
+build no longer has its image ("build #12 no longer has its image; build it
+again with `maestro build`"). The new run records which run it retries (a
+migration adds `runs.retry_of`), and `maestro runs show` and the page say
+"a retry of run 31". Book: `use/runs.md`, `reference/troubleshooting.md`.
+
+#### P5. A line whose machine was lost goes back to the queue
+
+Add `retries` to `maestro.toml`, a number from 0 to 5, 0 when left out,
+with the keys a generator may change for each line. A line that ends
+because its machine restarted, was removed or lost its container goes back
+to `queued` instead of ending in `error`, at most that many times, and its
+details say how many attempts it took (a migration adds
+`run_lines.attempts`). A line that exits with a code, is cancelled or runs
+out of time is never retried. The decision is a pure function in `runner`,
+with its test. Book: `repo/maestro-toml.md`, `reference/maestro-toml.md`,
+`use/runs.md`.
+
+#### P6. Outputs are kept while a line runs
+
+Outputs are copied out only when a container ends, so a line that runs for
+days and loses its machine keeps nothing. Add `outputs_every` to
+`maestro.toml`, a duration of at least 10 minutes, off when left out. In
+`runner.check`, a running line whose last copy is older has its outputs
+copied as `collect` does at the end, into the same place and within the
+same `RUN_OUTPUT_MAX_MB`, each copy taking the place of the one before. A
+line that then loses its machine keeps the last copy, and its note says when
+it was taken. This is the largest item here: do it after P5, and stop to
+say so if `collect` can't be run on a container that is still running.
+Book: `repo/maestro-toml.md`, `use/results.md`.
+
+#### P7. Old runs expire
+
+orq deletes no run on its own. Add `run_retention_days` to `setting`,
+changed from Admin › Settings, 0 by default, which means never. A run whose
+last line ended more than that many days ago is deleted with its files, by
+the runner, once an hour, the way `container.Remove` deletes one. A user
+keeps a run with `maestro runs keep <run>` and lets it go again with
+`--off` (a migration adds `runs.kept`). `maestro runs` and the page show
+when a run expires, once that is within a week. Book: `admin/retention.md`,
+`admin/policies.md`, `use/runs.md`.
+
+### For whoever runs a Maestro
+
+#### P8. orq backs its database up
+
+Everything orq knows is one SQLite file. Add `DB_BACKUP_DIR` to `config`,
+off when empty, and `DB_BACKUPS_KEPT`, 7 by default. Once a day orq writes
+`maestro-orq-<date>.db` there with `VACUUM INTO`, which is safe while orq
+runs, and removes the oldest beyond the number kept. It goes in `db`.
+`docker-compose.yml` mounts a volume for it. Book: `reference/env.md`, and
+`admin/retention.md` with the steps to restore one and what a restore
+loses (the runs' files aren't in it).
+
+#### P9. One test goes through everything
+
+Add `dev/e2e.sh`, which against the development stack signs in through its
+identity provider, approves a `maestro login`, adds the host as a machine,
+builds the public template, runs it, downloads the result with
+`maestro runs get` and checks a file it expects. It leaves the stack as it
+found it. If signing in can't be scripted against the development
+provider, stop and say so instead of adding a way around signing in. Book:
+`contributing.md`.
+
+#### P10. GPUs are a resource
+
+`maestro top` shows a machine's GPUs, but a line can't ask for one and the
+scheduler counts only cores and memory. This is not to be built from this
+paragraph: its owner first adds GPUs to the model in
+[The queues](#the-queues), since shares, the score and fitting a line all
+change with a third resource. What it will touch, for whoever plans it:
+`sched.Resources`, a machine's capacity (`machine`, `metrics`), `gpus` in
+`maestro.toml`, how Podman is given a device (`podman.CreateContainer`),
+usage and the export.
+
 ## Before finishing a change
 
 - [ ] No file was added where an existing one already holds that kind of thing.
@@ -835,4 +971,4 @@ the owner's to remove: ask, don't delete.
 - [ ] `sh book/build.sh` was run if a page or a command's help changed.
 - [ ] A new route, a new thing kept or a new program run was checked against Limits and secrets.
 - [ ] The book says what changed for whoever uses it.
-- [ ] The item was removed from Not followed yet, if it was one.
+- [ ] The item was removed from Not followed yet or To build, if it was one.
