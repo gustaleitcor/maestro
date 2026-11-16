@@ -1,8 +1,11 @@
 # Conventions
 
-Where code goes in the three repos, so that a change looks like what is
-already there. Read this before adding a file; when it and the code disagree,
-the code is right and this file is to be fixed.
+Where code goes in the repos, how the text a user reads is written, and what
+every part must hold to, so that a change looks like what is already there.
+Read this before adding a file. When it and the code disagree, the code is
+right and this file is to be fixed, with one exception: what
+[Not followed yet](#not-followed-yet) lists is work to do, and there this
+file is right.
 
 Two rules above the rest:
 
@@ -11,6 +14,26 @@ Two rules above the rest:
    Say why in its package comment.
 2. **Each layer does one thing.** What decides goes in a service; what speaks
    HTTP, a terminal or a browser only translates.
+
+## The repos
+
+```
+maestro            the compose files that run the parts together, and this file
+maestro-orq        the server
+maestro-cli        the maestro command, and the book
+maestro-view       the Maestro page
+maestro-template   the repository users fork to start
+```
+
+Each part is a repository of its own, held in `maestro` as a git submodule.
+A change is committed in the part's repository. The submodule in `maestro` is
+bumped only when asked.
+
+The root of `maestro` holds `docker-compose.yml`, `docker-compose-dev.yml`,
+`.env.example`, `dev/` (what the development stack needs), `README.md` and
+this file. Nothing else belongs there: no exported pages, no plans, no notes.
+A plan that was carried out is deleted, since the book says how the thing
+works now.
 
 ## maestro-orq
 
@@ -47,6 +70,12 @@ rather than about the *request*, that `if` belongs in the service, which
 returns something the handler can write without thinking: see
 `container.Logs` and `container.Preview`.
 
+`internal/middleware` is held to the same rule. It reads the cookie or the
+`Authorization` header, asks `auth` who that is, and puts the answer in the
+request's context. Whether a session or a key is still good is decided in
+`auth`, in one place, so that the route that verifies a key and the
+middleware can't disagree.
+
 ### Services
 
 | Package | Owns |
@@ -54,7 +83,7 @@ returns something the handler can write without thinking: see
 | `auth`, `session`, `key` | signing in, sessions, Maestro keys |
 | `build` | cloning a repo and building it |
 | `image` | the built images in orq's Podman |
-| `container` | runs: queueing them, listing them, their logs and files |
+| `container` | runs: queueing them, listing them, their logs and files; reading `maestro.toml` |
 | `runner` | the loop that starts containers and keeps what they leave; where things are on disk (`Data`) |
 | `sched` | which waiting line runs where: pure, without the database or the machines, so a simulator can run it too |
 | `group` | the groups users are split into, and who is in which |
@@ -62,10 +91,14 @@ returns something the handler can write without thinking: see
 | `evaluation` | how lines were served: waits, slowdowns, utilization, fairness, from a simulation or an export alike |
 | `machine` | machines and the SSH connection to them |
 | `metrics` | how loaded the machines are |
-| `setting` | server-wide limits |
+| `setting` | what an administrator changes from the Maestro page |
+| `config` | what whoever deploys orq sets in its environment |
 | `podman`, `gitclone`, `python` | the programs orq drives; `python` is inside orq, as WebAssembly, for the scripts of others |
 | `cache`, `kv` | Redis: what is remembered for a while |
-| `apierr`, `response`, `middleware`, `config` | shared plumbing |
+| `apierr`, `response`, `middleware` | shared plumbing |
+
+The package that holds runs is called `container` and stays so: a rename
+would touch every file for no change a user sees.
 
 Each resource package has the same shape:
 
@@ -93,11 +126,25 @@ var _ API = (*Service)(nil)
   handler's fallback message. A status orq doesn't have yet is a new
   constructor in `apierr`, not a `c.JSON` in a handler.
 - Where a file is on disk comes from `runner.Data` and nowhere else, so that
-  nothing can be named outside a run's directory.
+  nothing can be named outside a run's directory. How much a user keeps on
+  disk is asked of `runner.Data` too.
 - Something slow that is asked for often is remembered through `cache.Cache`,
   and whatever changes it forgets it (`Delete`). A nil cache always misses,
-  so a service works without one. The root README's table of what is
-  remembered is kept true.
+  so a service works without one. The book's table of what is remembered
+  (`admin/retention.md`) is kept true.
+
+### Limits: `config` or `setting`
+
+A limit that whoever deploys orq chooses once is an environment variable read
+in `config` (`RUN_PIDS`, `RUN_OUTPUT_MAX_MB`, `BUILD_TIMEOUT`). A limit an
+administrator changes while orq runs is in `setting`, and is changed from
+Admin › Settings (`images_per_user`, the scheduler). A new limit goes in
+`config` unless it was asked for on the page.
+
+Every limit has a default written in `config` or `setting`, a row in the
+book's `reference/env.md` or `admin/policies.md`, and a message for the user
+it stops. See [Limits and secrets](#limits-and-secrets) for what must have
+one.
 
 ### Database
 
@@ -130,16 +177,21 @@ internal/maestroapi  the client of orq's API: types and requests
 internal/forge       the clients of the git forges
 internal/config      what is stored on this computer
 internal/humanize    bytes, rates, durations and percentages as text
+internal/netfail     the words for a request that never got an answer
+internal/book        the built book, embedded, and what serves it
+book/                the book's pages (book/src) and what builds them
 ```
 
 - **`cmd`** is cobra. A command's file has its `cobra.Command`, its `run…`
   function, and the plain text it prints. What a command prints is written by
   a `write…(w io.Writer, …)` function, so that it can be tested and drawn
   again; `run…` fetches and calls it. Completions are in `complete.go`,
-  colours in `style.go`.
+  colours in `style.go`. `concepts.go` is a help topic and `gendocs.go`
+  writes the book's command reference: neither is a command a user runs.
 - **`tui`** is everything that takes the terminal over or rewrites it in
-  place: the full-screen views (`top.go`) and `Watch`. `cmd` calls into
-  `tui`; `tui` never imports `cmd`.
+  place: the full-screen views (`top.go`), `Watch`, and the questions asked
+  the first time (`welcome.go`, `init.go`). `cmd` calls into `tui`; `tui`
+  never imports `cmd`.
 - **`internal/maestroapi`** only mirrors the API: a struct per response, a
   function per request. No methods on its types, and nothing about how a
   thing is shown. How a value reads on screen (`2/4 +3`, a container's
@@ -151,6 +203,17 @@ internal/humanize    bytes, rates, durations and percentages as text
 - Tests are beside the file, named as in orq. A command is tested against a
   fake orq (`httptest`, `MAESTRO_ORQ_URL`), a view through its model and
   `ansi.Strip`.
+
+### The book
+
+`book/src` is the book. `book/src/reference/cli.md` is written from the
+commands' help by `maestro gen-docs`, and `internal/book/site` is the built
+book, committed so that a plain `go build` carries it. Neither is edited by
+hand.
+
+After changing a page, `book.toml` or any command's help, run
+`sh book/build.sh` and commit what it writes. `go test ./...` fails until you
+do. A page that moves is moved in `cmd/docs.go` too.
 
 ## maestro-view
 
@@ -167,6 +230,9 @@ src/style.css        the colours, and every class more than one component uses
   in `PageShell`; each page draws its own `.top` bar.
 - A component talks to orq with `fetch(…, { credentials: 'include' })`, and
   emits `unauthorized` on a 401 instead of handling it.
+- A component is one page or one piece of a page. One that has grown past
+  about 500 lines holds more than one piece: take a piece out into a
+  component of its own, as `LineDetails` and `FileTree` are.
 - A class used by two components goes in `style.css` (`.btn`, `.card`,
   `.pill`, `.row`, `.top`), and its colours are the tokens at the top of it;
   one used by a single component stays in its `<style scoped>`. Icons are
@@ -182,26 +248,439 @@ src/style.css        the colours, and every class more than one component uses
   view's that draws it the same way, never the file as a blob, which would
   run as the view.
 - No new dependencies without asking: it is Vue, Vite and highlight.js
-  (its core, and only the languages `FilePreview` registers).
+  (its core, and only the languages `FilePreview` registers). That includes
+  a test runner: the view has no tests, and gets none until one is asked
+  for.
+- Packages are installed with npm from `package-lock.json`, in development
+  and in the image alike.
+
+## Text a user reads
+
+A command's help, what a command prints, an error, a label or a note on the
+Maestro page: all of it is written in the voice of the book
+(`maestro-cli/book/src`). Someone who read a chapter and then runs the
+command should meet the same words for the same things. When you write or
+change such text, open the book's page on that subject and take its wording.
+
+### The voice
+
+- Write to the reader as "you". The command or the page is "it", and the
+  server is "Maestro" or "the server".
+- One idea in a sentence. Two ideas are two sentences, not one joined by a
+  semicolon or by "; without it, …".
+- Say what happens, in the order it happens. Put the condition first and the
+  result after it: "With --watch, it follows the run until the run is over."
+- Use the plain verb. "It asks before it removes", not "confirmation is
+  requested".
+- Say a thing once. A sentence that repeats the one before it goes.
+- No dashes between clauses and no exclamation marks. A colon introduces a
+  list or an example.
+- Give the number: "every 2 seconds", "your 20 newest runs", "at most 1000
+  lines".
+- When something can't be done, say what to do next, with the command that
+  does it.
+
+### The words
+
+One word for each thing, the glossary's (`book/src/reference/glossary.md`).
+A word the glossary doesn't have is added there before it is used anywhere.
+
+| Write | Not | Because |
+| --- | --- | --- |
+| build #12, run 31, line 2 | build 12, run #31, job, task | they count apart, and are written apart |
+| repository in a sentence; repo in a command, an argument, a column or a label | | `maestro repos`, `<repo>`, `REPO` |
+| machine | node, host, server, worker | a machine is one of Maestro's, where containers run |
+| your computer | this machine, the client, locally | "machine" is taken |
+| the Maestro page | maestro-view, the web UI, the dashboard, the site | users don't know the repos' names |
+| Maestro, or the server | orq, the backend, the API | orq is named only to administrators, in the book's "Running a Maestro" |
+| sign in, sign out | log in, log out, authenticate | the commands keep their names, `maestro login` and `maestro logout` |
+| Maestro key | token, API key, credential | a token is a forge's |
+| issued | minted | |
+| administrator | admin | Admin is the name of a page |
+| remove an image, a forge, a machine; delete a run | | a run's files go with it |
+| ended in an error | errored | |
+| standard output, standard error | stdout, stderr | except the files `stdout.log` and `stderr.log`, and `--json` names |
+| Ctrl-C | ctrl-c, ^C | |
+| queued, staged, assigned, starting, running, succeeded, failed, error, cancelled | Queued, QUEUED, pending, done | the statuses as the server names them, in lower case |
+| colours, cancelled | colors, canceled | the book's spelling |
+
+### A command's help
+
+- `Short` starts with a verb, has no full stop, and fits the command list:
+  "Download the files kept from a run". A command that only groups others
+  says what they are for: "List, show and download your runs", not "Commands
+  for the runs started with `maestro run`".
+- `Long` opens with what the command does, its verb in the third person
+  ("Builds a container image from …"). After that it speaks to "you".
+- A whole command is in backticks (`maestro runs rm 31`). A flag, a file name
+  or an argument is written bare (--watch, maestro.toml, <build>).
+- A paragraph holds one subject: what it does, then what the arguments are,
+  then the flags that change it most. Whatever a flag's own line already
+  says isn't said again in `Long`.
+- A flag's description is a fragment in lower case with no full stop, and
+  says the default when cobra doesn't print it: "how many days back".
+- A flag that takes a value names the value, never a Go type: `--line n`,
+  not `--line int64Slice`. cobra takes the name from the word in backticks
+  in the flag's description.
+- `Example` holds commands a reader could run as they are, with the names
+  the book uses (`my-app`, build 12, run 31), and a `#` comment only where
+  the command doesn't explain itself.
+- Every help ends with its `maestro docs` topic, which `root.go` adds.
+
+Before:
+
+```text
+With --server, signs in to that Maestro server, which every command then
+talks to; without it, to the one kept, which is asked for the first time.
+The key is only ever sent to the server that minted it.
+```
+
+After:
+
+```text
+With --server, it signs you in to that Maestro server, and every later
+command talks to it. Without --server, it uses the server the CLI has kept,
+and asks for one the first time. The CLI sends your key only to the server
+that issued it.
+```
+
+Before:
+
+```text
+Shows every machine on a row: CPU, memory, GPUs, load, how many of the
+cores it has for lines they take and how many lines wait (6/14 +3),
+refreshed as you watch.
+```
+
+After:
+
+```text
+Shows one row for each machine: its CPU, memory, GPUs and load. The last
+column reads 6/14 +3 when lines use 6 of the 14 cores the machine has for
+them and 3 more lines wait. The rows refresh every 2 seconds.
+```
+
+### What a command prints, and errors
+
+- A table's headings are in capitals and its cells are what the book's
+  examples show (`RUN`, `#14`, `54m ago`).
+- A message after something was done says what was done and names it:
+  "Deleted run 31 and its files."
+- An error says what is wrong in the user's words and ends with what to do:
+  "you have 10 of the 10 images allowed, and runs are using all of them;
+  remove one with `maestro builds rm <build>`". It doesn't start with
+  "error:" or "failed to", and it doesn't show a Go error, a URL or a status
+  code unless that is all there is.
+- An error from orq is written once, in orq, as an `apierr`. The CLI and the
+  page show it as it came.
+- A message the book quotes (`reference/troubleshooting.md`) changes there
+  in the same change.
+
+### The Maestro page
+
+- Labels, buttons and headings are in sentence case with no full stop:
+  "Images per user", "Kept outputs", "Sign out".
+- A button says what it does to what: "Remove", "Download run 31 as a zip".
+- An empty list says what would be there and how to get it: "No runs yet.
+  Start one with `maestro run <build>`."
+- A note under a field is a full sentence: "Stored encrypted and never shown
+  again."
+- A `title` that explains a value is a sentence in words, starting with a
+  capital: "The share of the machines you have used, as the scheduler counts
+  it." A symbol from the scheduler's maths (θ, Z) is named in words first.
+- Apostrophes and quotes are the straight ones, as in the book.
+- The page says "you" where the CLI does, and uses the words above.
+
+## Limits and secrets
+
+Lab users are trusted with their own work, and nothing more. These hold for
+every part:
+
+- Whatever signs someone in ends, and can be ended. A session expires
+  (`SESSION_TTL`). A Maestro key expires (`KEY_TTL`), its owner can revoke
+  it, `maestro logout` revokes the one it holds, and an administrator can
+  revoke every key of a user.
+- Who someone is, is read on every request. Whether a caller is an
+  administrator comes from their row in `users`, never from something kept in
+  the session or the key. That row is as fresh as their last sign-in on the
+  page, so a key can outlive a removal from the identity provider by at most
+  `KEY_TTL`. The book says so (`admin/identity.md`).
+- Whatever runs someone else's code has limits on time, memory, CPU and
+  processes. A line's container has all four. A build has a time limit
+  (`BUILD_TIMEOUT`), memory and CPU, and a user builds a few at once. A
+  generator runs inside orq as WebAssembly with no access to the host.
+- Whatever keeps someone's data has a limit on how much. A line keeps at
+  most `RUN_OUTPUT_MAX_MB`, a user keeps at most `images_per_user` images,
+  and a user's runs keep at most `USER_DATA_MAX_GB` in all.
+- A secret is kept sealed or hashed, and is sent only where it is needed.
+  Keys and sessions are stored as hashes. Machines' SSH keys are sealed with
+  `MACHINE_SECRET`. A forge token is kept by the CLI, sent for one clone, and
+  never reaches an image (`.git` is stripped).
+- orq is reached through the reverse proxy and nothing else. The compose
+  file publishes its port on the loopback address. Every route but signing
+  in, the health check and verifying a key needs a session or a key, the
+  swagger pages included.
+- Redis has a password outside development. It holds the sessions, so
+  whoever can write to it can sign in as anyone. Builds run on the same host
+  and may reach it.
+- A request that never finishes doesn't hold orq. The HTTP server has a
+  timeout on reading headers and on idle connections. It has none on writing,
+  because logs, builds and archives are streamed for as long as they take.
+
+A new route, a new thing kept, or a new program run for a user is checked
+against this list before it is done.
+
+## Building and deploying
+
+- A Dockerfile copies the lock file with the manifest and installs from it
+  (`go.sum` with `go mod download`, `package-lock.json` with `npm ci`), so
+  that an image built twice holds the same dependencies.
+- An image that runs in production holds the program and what it runs
+  (`git`, `tini`, `cloudflared`, the CA certificates), on a slim base. The
+  compiler and the source stay in the build stage.
+- A version that is downloaded is pinned and checked against its checksum, as
+  `cloudflared` is in orq's Dockerfile and `mdbook` is in `book/build.sh`.
+- Each repository has a workflow in `.github/workflows` that runs, on every
+  push and pull request, what [Everywhere](#everywhere) says to run before a
+  change is done. The CLI's release workflow is apart from it.
+- What production needs set is in `.env.example`, with a line saying what it
+  is for and how to make a value. `docker-compose.yml` holds no secret.
+- SQLite is opened in WAL mode with a busy timeout, so that the API's reads
+  don't wait on the runner's writes. A backup of the database copies the
+  `-wal` file with it, or uses `sqlite3 .backup`.
 
 ## Everywhere
 
 - Comments say why, or what isn't obvious; none restate the code. Their
   voice is the one already there: plain, about what the thing is.
 - Names follow the surrounding code before any outside style guide.
-- A behaviour a user can see is in the root `README.md`; each repo's README
-  says what that repo is.
+- A behaviour a user or an administrator can see is in the book, in the same
+  change as the code. Each repository's README says what that repository is
+  and how to work on it, and points to the book for the rest. The root README
+  says how the parts are put together and deployed.
 - `go build ./... && go vet ./... && go test ./...` in orq and the CLI, and
   `npm run build` in the view, before saying a change is done.
-- Commits carry no AI attribution lines, and submodules are bumped only when
-  asked.
+- A commit is one change, and its message is one sentence that says what
+  changed for whoever uses the thing: "Let a Maestro key be revoked, by its
+  owner or an administrator". Commits carry no AI attribution lines, and
+  submodules are bumped only when asked.
+
+## Not followed yet
+
+Where the code doesn't hold to this file. Each item is one change, done and
+committed on its own, in the order given within its group. An item is
+removed from this list in the commit that finishes it. If an item can't be
+done as written, stop and say why instead of doing something near it.
+
+### Limits and secrets
+
+#### K1. A key can be revoked
+
+`internal/db/queries/keys.sql` has no delete, and `maestro logout` only
+forgets the key on the user's computer.
+
+- orq: add queries that delete a key by its hash, by its user and prefix, and
+  all of a user's. Add to `auth.API`: `RevokeKey(ctx, userID, prefix)`, which
+  is `apierr.NotFound` when that user has no such key; `RevokeCurrentKey(ctx,
+  rawKey)`; `RevokeUserKeys(ctx, userID)`; and `ListKeys(ctx, userID)`.
+- Routes, in `internal/api/keys.go`: `GET /api/keys` and
+  `DELETE /api/keys/:prefix` for a session or a key, `DELETE
+  /api/keys/current` for a key, and `DELETE /api/admin/users/:id/keys` for
+  an administrator.
+- CLI: `maestro logout` calls `DELETE /api/keys/current` before it forgets.
+  If the server can't be reached it says the key is still valid there, and
+  forgets it anyway. Add `maestro keys` (lists the prefix of each key and
+  when it was created, with `--json`) and `maestro keys rm <prefix>` (asks
+  first, `--yes`), in a new `cmd/keys.go`.
+- Page: in `GroupsAdmin.vue`, each user gets a "Revoke keys" button that
+  asks before it calls the administrator's route.
+- Book: `use/login.md`, `admin/identity.md`, the glossary.
+- Done when a test in `auth` shows a revoked key is refused by
+  `RequireMaestroKey` and by `/api/keys/verify`, and a test in `cmd` shows
+  `maestro logout` calls the route.
+
+#### K2. The middleware asks `auth`
+
+`middleware.RequireMaestroKey` reads the key from the database itself, and
+`auth.VerifyKey` does the same apart from it. Give `auth.API` one method that
+takes a raw key and returns its user or an `apierr.Unauthorized`, and have
+both the middleware and `VerifyKey` use it. `internal/key` is then used only
+by `auth`: move its two functions into `internal/auth/keys.go`, with the key
+methods of K1, and delete the package. Done when `middleware` no longer
+imports `key`, and no longer queries keys.
+
+#### K3. A key expires
+
+Add `KEY_TTL` to `config` (a duration, default `2160h`, 90 days; `0` means
+never). The method from K2 refuses a key whose `created_at` is older, with
+"this Maestro key expired; run `maestro login`". `GET /api/keys` and
+`maestro keys` show when each key expires. Book: `reference/env.md`,
+`use/login.md`, `reference/troubleshooting.md`. Done when a test shows a key
+older than the TTL is refused and one with `KEY_TTL=0` isn't. Say in the
+commit message that keys older than 90 days stop working when this is
+deployed.
+
+#### B1. A build has memory and CPU limits, and a user builds two at once
+
+`podman.Build` passes neither limit. Add `BUILD_MEMORY_MB` (default 4096) and
+`BUILD_CPUS` (default 2) to `config`, and pass them in
+`client.ImageBuildOptions` (`Memory`, `CPUPeriod`, `CPUQuota`). Add
+`BUILDS_AT_ONCE` (default 2): `build.reserve` already counts a user's running
+builds, and now refuses one over the limit with `apierr.Conflict`: "you
+already have 2 builds running; wait for one to end". Check with
+`podman/live_test.go` that Podman holds a build to the memory limit. If it
+ignores the option, say so and leave the limit out instead of documenting one
+that does nothing. Book: `reference/env.md`, `use/builds.md`.
+
+#### B2. Redis has a password
+
+In `.env.example`, show `REDIS_URL` with a password and say how to set one on
+the server. In `main.go`, when `MODE` isn't `dev` and `REDIS_URL` has no
+password, log one line at start saying that sessions can be forged by
+anything that reaches Redis. Book: `admin/deploy.md`.
+
+#### L1. A line has a longest running time
+
+Add `RUN_MAX_HOURS` to `config.RunLimits` (default 168, a week; `0` means no
+limit). In `runner.check`, a running line whose `started_at` is older is
+stopped the way a cancelled one is: its logs and outputs are collected, and
+it ends as `error` with the note "stopped after 168 hours, the longest a line
+may run on this server". Book: `reference/env.md`, `use/runs.md`, the
+glossary's statuses. Done when a test in `runner` shows which lines are over
+the limit (a pure function, as `ended` is).
+
+#### L2. A user's runs keep a limited amount
+
+Add `USER_DATA_MAX_GB` to `config.RunLimits` (default 0, no limit). Add a
+method to `runner.Data` that sums the files under a user's directory.
+`container.Create` refuses a new run once the user is at the limit, with
+`apierr.Conflict`: "your runs keep 52 GB of the 50 GB allowed; delete one
+with `maestro runs rm <run>`". Book: `reference/env.md`,
+`admin/retention.md`.
+
+#### N1. orq listens on the loopback address
+
+In `docker-compose.yml`, the port becomes
+`"${ORQ_BIND:-127.0.0.1}:3005:3005"`, with `ORQ_BIND` explained in
+`.env.example` for a reverse proxy that runs on another host. Book:
+`admin/deploy.md`.
+
+#### N2. The swagger pages need a session
+
+In `router.go`, register `/swagger/*any` behind `authMW` unless `cfg.Dev`.
+
+#### N3. The HTTP server has timeouts
+
+In `main.go`, replace `router.Run` with an `http.Server` that has a
+`ReadHeaderTimeout` of 10 seconds and an `IdleTimeout` of 2 minutes, and no
+`ReadTimeout` or `WriteTimeout`.
+
+### Building and deploying
+
+#### C1. Each repository tests itself
+
+Add `.github/workflows/test.yml` to `maestro-orq` and `maestro-cli` (set up
+Go from `go.mod`, then build, vet and test) and to `maestro-view` (`npm ci`,
+`npm run build`).
+
+#### V1. The view's image installs from the lock file
+
+Its `Dockerfile` copies only `package.json` and runs `bun install`, so
+`package-lock.json` is ignored. Build on a Node LTS image: copy both files,
+`npm ci`, then `npm run build`. `serve.ts` and the `serve` script use bun:
+keep them only if something still runs them, and say what in the README.
+
+#### D1. SQLite in WAL mode
+
+In `main.go`, open the database with `_pragma=journal_mode(WAL)` and
+`_pragma=synchronous(NORMAL)` beside the busy timeout. Add `*.db-wal` and
+`*.db-shm` to orq's `.gitignore`. Book: `admin/retention.md`, on backing the
+database up. Don't turn `foreign_keys` on: the deletes in `container.Remove`
+and `group` were never run with it, and that needs its own change and tests.
+
+#### D2. orq's production image is slim
+
+The `prod` stage is the Go image with the whole source. Build the binary in
+a stage, then copy it, with `cloudflared`, into `debian:bookworm-slim` with
+`git`, `tini` and `ca-certificates` installed. orq runs `git` and `sh`, so
+both must be there. Done when `podman build --target prod` works and the
+image starts.
+
+### Text a user reads
+
+#### T1. The CLI's help, in the book's voice
+
+Go through every file in `maestro-cli/cmd`, one commit per command group
+(`login` and `logout`; `build` and `builds`; `run` and `runs`; `forges` and
+`repos`; `queue`, `usage`, `export`, `settings`; `machines` and `top`;
+`docs` and the root). For each command, open its page in the book, then
+rewrite `Short`, `Long`, the flags' descriptions and the messages it prints
+by [Text a user reads](#text-a-user-reads). Change the wording and nothing
+else: no flag is renamed, and no fact is added or dropped. Known cases:
+
+- the sentences shown as "Before" above, in `login.go` and `top.go`;
+- "this machine" for the user's computer, in `logout.go`;
+- "minted", "errored", "ctrl-c", and "stdout" and "stderr" in sentences;
+- `--line int64Slice (default [])` in `maestro runs get`;
+- the group commands' `Short` ("Commands for what `maestro build` built");
+- `--server`'s "(default: the one kept, asked for the first time)".
+
+Run `sh book/build.sh` in each commit, and fix the tests that quote the old
+text.
+
+#### T2. orq's messages
+
+The same pass over every `apierr.…(` message and every `response.Fail`
+fallback in `maestro-orq/internal`, and over what a build writes to its log
+(`build.Create`). One commit.
+
+#### T3. The Maestro page's text
+
+The same pass over every component in `maestro-view/src`, one commit per
+component: labels, buttons, empty lists, notes, `title`s, placeholders and
+the messages set in the script. Known cases:
+
+- curly apostrophes ("user’s", "group’s") beside straight ones;
+- `title`s that are fragments in lower case ("the container never wrote
+  it"), and ones that use θ and Z without naming them, in
+  `SettingsAdmin.vue`;
+- "Open in new tab, drawn", which doesn't say what it does.
+
+### Structure
+
+#### S1. The READMEs point to the book
+
+The root `README.md` holds over 600 lines of behaviour that the book now
+covers, and the two are kept true by hand. For each section of the root
+README, find the page of the book that says the same thing. If the book
+lacks something, add it to the book. Then cut the README down to what
+Maestro is, the layout, getting started, and production, each with a link to
+the book's page. Do the same for `maestro-view/README.md`. One commit per
+README, after the text of that part is done (T1 to T3).
+
+#### S2. The runs page is one component of 1170 lines
+
+Take the pieces of `RunsDrive.vue` out into components of their own, one
+commit each: the list of runs, one run's lines, and the bar of filters and
+search. Behaviour and classes stay as they are.
+
+#### S3. The root holds what it shouldn't
+
+`plano.md` is the plan of the queues, which are built and described in the
+book's `how/queue.md`. Delete it once its owner agrees. `Maestro.html`
+(5.6 MB, untracked) and the worktree at `.claude/worktrees/docs-book` are
+the owner's to remove: ask, don't delete.
 
 ## Before finishing a change
 
 - [ ] No file was added where an existing one already holds that kind of thing.
 - [ ] No package was added for what an existing one owns.
-- [ ] `internal/api` gained only handlers, types and annotations.
+- [ ] `internal/api` and `internal/middleware` gained only handlers, types and annotations.
 - [ ] `internal/maestroapi` gained only types and requests.
 - [ ] Tests are beside what they test, in the package that holds it.
 - [ ] `sqlc generate` and `swag init` were run if queries or annotations changed.
-- [ ] The README says what changed for whoever uses it.
+- [ ] Text a user reads uses the book's words, and the book's page says the same thing.
+- [ ] `sh book/build.sh` was run if a page or a command's help changed.
+- [ ] A new route, a new thing kept or a new program run was checked against Limits and secrets.
+- [ ] The book says what changed for whoever uses it.
+- [ ] The item was removed from Not followed yet, if it was one.
