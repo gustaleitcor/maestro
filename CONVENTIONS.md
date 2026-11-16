@@ -133,6 +133,38 @@ var _ API = (*Service)(nil)
   so a service works without one. The book's table of what is remembered
   (`admin/retention.md`) is kept true.
 
+### The queues
+
+`sched` holds the model, and everything else carries it out or shows it.
+There are three queues, and a policy for each:
+
+1. The user queue. Each user's waiting lines, in the order the user policy
+   gives them. The first of them is the user's head.
+2. The dispatcher queue. The heads, one for each user who has lines waiting,
+   and nothing else. It is not filled from the user queues and has no size
+   of its own: when a user's head goes to a machine, their next line is
+   their head. Each group has a dispatcher queue of its own, made of the
+   heads of its users, and groups take turns. In a group's turn the
+   dispatcher policy picks one head, which goes to a machine drawn among
+   those that would hold it and have room in their queue.
+3. The machine queue. The lines given to a machine that wait for room on it,
+   at most `depth` of them. The machine policy picks which starts.
+
+So a line is `queued` in its user's queue (as its head or behind it),
+`assigned` in a machine's queue, then `starting` and `running`. Being a head
+is worked out on every tick from the user policy and is never stored: with
+LCFS or PQ a newer line can take the head's place.
+
+A line that no machine would hold, even empty, is never a head and holds
+back no one. A user's share counts their lines assigned, starting and
+running.
+
+In the score, a line's cores and memory are each divided by what every
+machine has for lines, summed: capacity less what is kept back, over the
+machines orq knows and can reach. That is the total users' shares are
+taken over too. Tetris alone divides by the one machine it fits a line
+into.
+
 ### Limits: `config` or `setting`
 
 A limit that whoever deploys orq chooses once is an environment variable read
@@ -275,7 +307,7 @@ change such text, open the book's page on that subject and take its wording.
 - Say a thing once. A sentence that repeats the one before it goes.
 - No dashes between clauses and no exclamation marks. A colon introduces a
   list or an example.
-- Give the number: "every 2 seconds", "your 20 newest runs", "at most 1000
+- Give the number: "every 2 seconds", "your 20 newest runs", "at most 5000
   lines".
 - When something can't be done, say what to do next, with the command that
   does it.
@@ -301,7 +333,8 @@ A word the glossary doesn't have is added there before it is used anywhere.
 | ended in an error | errored | |
 | standard output, standard error | stdout, stderr | except the files `stdout.log` and `stderr.log`, and `--json` names |
 | Ctrl-C | ctrl-c, ^C | |
-| queued, staged, assigned, starting, running, succeeded, failed, error, cancelled | Queued, QUEUED, pending, done | the statuses as the server names them, in lower case |
+| queued, assigned, starting, running, succeeded, failed, error, cancelled | Queued, QUEUED, pending, done, staged | the statuses as the server names them, in lower case |
+| user queue, dispatcher queue, machine queue; a user's head | submission queue, intermediate queue, staged lines, selection, allocation | the three queues, see [The queues](#the-queues) |
 | colours, cancelled | colors, canceled | the book's spelling |
 
 ### A command's help
@@ -471,6 +504,105 @@ Where the code doesn't hold to this file. Each item is one change, done and
 committed on its own, in the order given within its group. An item is
 removed from this list in the commit that finishes it. If an item can't be
 done as written, stop and say why instead of doing something near it.
+
+### The queues
+
+These come first, and in this order. The code has a fourth level between
+the user queues and the machines: a buffer of `staged` lines for each group,
+filled by a select policy and emptied by an allocate policy. It was built by
+mistake. [The queues](#the-queues) says what is meant.
+
+#### Q1. `sched` has three queues
+
+In `maestro-orq/internal/sched`:
+
+- `Config` and `Policies` lose `Select`, `Allocate` and `StagedCapacity`
+  and gain `Dispatcher` (JSON `dispatcher`): fifo, lcfs, siro or pq, FIFO by
+  default. Saved settings that still have `select` are read with it as the
+  dispatcher, so that an administrator's PQ isn't lost. `allocate` and
+  `staged_capacity` in saved settings are ignored.
+- `Snapshot` loses `Staged`, `Task` loses `Staged`, and the status `Staged`
+  goes. The moves left are queued to assigned, assigned to starting, and
+  assigned back to queued for a line whose machine would no longer hold it.
+- `Step` drops selection. Its dispatch step gives the groups turns, as
+  allocation does now. In a group's turn the candidates are the heads of
+  its users: for each user, the line the user policy picks among their
+  queued lines that some machine would hold. A head with no machine that
+  has room in its queue isn't a candidate this turn, and its user's other
+  lines don't go in its place. The dispatcher policy picks one candidate,
+  and the machine is drawn as now. After each line dispatched, its need is
+  added to its user's share and the shares are worked out again, as
+  `selectIn` does now, so that PQ with a share weight takes users in turn.
+- Shares count what a user's lines take once assigned, starting or running.
+- Promotion on the machines stays as it is.
+- Done when `step_test.go` shows: a user with ten lines and a user with one
+  each have one head; no user has two lines dispatched in a turn while
+  another user's head has room; a group with no head that has room passes
+  its turn; a line no machine holds blocks no one.
+
+#### Q2. The score divides by the sum
+
+`Context.Largest` becomes `Context.Cluster`, set from the state's `cluster`
+(what every known machine that isn't down has for lines, summed).
+`Score.Of` divides a line's cores and memory by it. Tetris keeps
+`Context.Whole`. Done when a test in `policy_test.go` shows a line's term
+with two machines of 8 cores is its cores over 16, not over 8. Say in the
+commit message that the cores and memory weights now multiply smaller
+numbers, so saved weights weigh less than they did.
+
+#### Q3. orq around `sched`
+
+- A migration sends lines `staged` back to `queued` and drops
+  `run_lines.staged_at`. Queries that name `staged` lose it
+  (`internal/db/queries/runs.sql`, `groups.sql`); `StageLine` goes.
+- The scheduler's settings, and the group a line's user was in, are recorded
+  when a line is assigned, where they were recorded when it was staged.
+- `runner` (`schedule.go`, `runner.go`: `Waiting`, `Active`, `unstart`,
+  the statuses) and `simulate` follow the new moves. A line sent back from a
+  machine goes to `queued`.
+- `container/queue.go` and `api/queue.go`: the queue reports, for each group
+  and for the caller, how many lines are queued, how many of those are heads
+  (the dispatcher queue), and how many are assigned. `api/settings.go` and
+  `api/runs.go` lose the staged fields and gain `dispatcher`.
+- The export and `evaluation` lose the staged time. A file exported before
+  this, with that column, is still read.
+- `cmd/sim` takes `-dispatcher` where it took the two policies.
+- Run `sqlc generate` and `swag init`. Done when `go build ./... && go vet
+  ./... && go test ./...` pass and `grep -ri staged internal cmd` finds only
+  old migrations and the reading of old exports and settings.
+
+#### Q4. The CLI
+
+`maestro queue`, `maestro settings`, `maestro runs show`, `maestro export`
+and `maestro help concepts` (`cmd/queue.go`, `settings.go`, `runs.go`,
+`export.go`, `concepts.go`, `internal/maestroapi`) show the three queues:
+no `staged`, the dispatcher policy where select and allocate were, and the
+number of heads in the dispatcher queue. An older server that still answers
+with `staged` is shown as it answers.
+
+#### Q5. The Maestro page
+
+`QueuePanel.vue`, `SettingsAdmin.vue` (one dispatcher policy, no staging
+capacity), `LineDetails.vue` and `RunsDrive.vue` (a line's timeline and
+status), `LinesReport.vue` and `GroupsAdmin.vue`.
+
+#### Q6. The book
+
+`how/queue.md`, `how/score.md`, `admin/policies.md`, `admin/groups.md`,
+`admin/sim.md`, `use/usage.md` (the export's columns), `use/runs.md`,
+`use/page.md`, `start/quickstart.md`, `admin/machines.md` and the glossary's
+statuses. The diagrams in `how/queue.md` are redrawn with three queues. Then
+`sh book/build.sh`.
+
+#### Q7. A run has at most 5000 lines
+
+`container.MaxLines` goes from 1000 to 5000. The book says 1000 in
+`repo/maestro-toml.md`, `repo/generator.md`, `reference/troubleshooting.md`
+and the glossary. `maestro-template`'s README says ten runs of a thousand
+are needed for 10 000 containers, which becomes two runs of 5000. Check
+that a run of 5000 lines is listed without a query per line
+(`container.List`, `Get`), and that `RunsDrive.vue` draws 5000 rows without
+freezing; if it does freeze, say so instead of raising the limit halfway.
 
 ### Limits and secrets
 
@@ -685,8 +817,9 @@ search. Behaviour and classes stay as they are.
 
 #### S3. The root holds what it shouldn't
 
-`plano.md` is the plan of the queues, which are built and described in the
-book's `how/queue.md`. Delete it once its owner agrees. `Maestro.html`
+`plano.md` is the plan of the queues, and describes the four levels that
+[The queues](#the-queues) replaces. Once Q1 to Q6 are done the book's
+`how/queue.md` says how they work. Delete it once its owner agrees. `Maestro.html`
 (5.6 MB, untracked) and the worktree at `.claude/worktrees/docs-book` are
 the owner's to remove: ask, don't delete.
 
