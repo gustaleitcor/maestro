@@ -537,7 +537,13 @@ that does nothing. Book: `reference/env.md`, `use/builds.md`.
 In `.env.example`, show `REDIS_URL` with a password and say how to set one on
 the server. In `main.go`, when `MODE` isn't `dev` and `REDIS_URL` has no
 password, log one line at start saying that sessions can be forged by
-anything that reaches Redis. Book: `admin/deploy.md`.
+anything that reaches Redis. Book: `admin/deploy.md`, which says that Redis
+is given a password, is not published beyond the host, and that a Redis
+shared with other services gets the same care from each of them.
+
+The Redis itself is not Maestro's to change: on the production server it is
+a container of another compose project, shared with other services. Its
+owner sets the password there, and then `REDIS_URL` here.
 
 #### L1. A line has a longest running time
 
@@ -562,8 +568,15 @@ with `maestro runs rm <run>`". Book: `reference/env.md`,
 
 In `docker-compose.yml`, the port becomes
 `"${ORQ_BIND:-127.0.0.1}:3005:3005"`, with `ORQ_BIND` explained in
-`.env.example` for a reverse proxy that runs on another host. Book:
-`admin/deploy.md`.
+`.env.example`. Book: `admin/deploy.md`, which also says that the host needs
+a firewall letting in only SSH and what the reverse proxy listens on.
+
+Don't deploy this without its owner. On the production server the reverse
+proxy is a container of another compose project, and reaches orq at
+`host.containers.internal:3005`, the gateway of Podman's bridge. Whether a
+port published on the loopback address still answers there has to be tried
+on that server. If it doesn't, `ORQ_BIND` is set there to what does, or the
+proxy and orq are put on one Podman network and the port isn't published.
 
 #### N2. The swagger pages need a session
 
@@ -605,6 +618,12 @@ a stage, then copy it, with `cloudflared`, into `debian:bookworm-slim` with
 `git`, `tini` and `ca-certificates` installed. orq runs `git` and `sh`, so
 both must be there. Done when `podman build --target prod` works and the
 image starts.
+
+#### D3. The book says how rootless Podman keeps running
+
+Add to `admin/deploy.md`: the user whose Podman runs Maestro needs lingering
+(`loginctl enable-linger <user>`), or its containers stop when that user's
+last session ends. The production server has it off.
 
 ### Text a user reads
 
