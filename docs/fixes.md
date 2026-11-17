@@ -36,27 +36,6 @@ freezing; if it does freeze, say so instead of raising the limit halfway.
 
 ## Text a user reads
 
-### T1. The CLI's help, in the book's voice
-
-Go through every file in `maestro-cli/cmd`, one commit per command group
-(`login` and `logout`; `build` and `builds`; `run` and `runs`; `forges` and
-`repos`; `queue`, `usage`, `export`, `settings`; `machines` and `top`;
-`docs` and the root). For each command, open its page in the book, then
-rewrite `Short`, `Long`, the flags' descriptions and the messages it prints
-by [Text a user reads](writing.md). Change the wording and nothing
-else: no flag is renamed, and no fact is added or dropped. Known cases:
-
-- the sentences shown as "Before" in [writing.md](writing.md), in
-  `login.go` and `top.go`;
-- "this machine" for the user's computer, in `logout.go`;
-- "minted", "errored", "ctrl-c", and "stdout" and "stderr" in sentences;
-- `--line int64Slice (default [])` in `maestro runs get`;
-- the group commands' `Short` ("Commands for what `maestro build` built");
-- `--server`'s "(default: the one kept, asked for the first time)".
-
-Run `sh book/build.sh` in each commit, and fix the tests that quote the old
-text.
-
 ### T3. The Maestro page's text
 
 The same pass over every component in `maestro-view/src`, one commit per
@@ -68,6 +47,15 @@ the messages set in the script. Known cases:
   it"), and ones that use θ and Z without naming them, in
   `SettingsAdmin.vue`;
 - "Open in new tab, drawn", which doesn't say what it does.
+
+### T4. What T1 and T2 left
+
+The same pass over the text they didn't cover, one commit per repository:
+the views in `maestro-cli/tui` (`welcome.go`, `init.go`, `top.go`,
+`repolist.go`), where bare `maestro` still ends with "maestro --help for
+more information"; the three messages `middleware` writes itself ("login
+required", "sessions are unavailable", "only administrators can do this");
+and `use/login.md`, which calls the user's computer "a machine".
 
 ## Structure
 
