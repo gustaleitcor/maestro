@@ -8,16 +8,15 @@ done as written, stop and say why instead of doing something near it.
 
 ## Structure
 
-### S4. The book's docs service
+### S4. `maestro docs --web` opens what nothing serves
 
-The book says what the stack doesn't have. `admin/deploy.md` names a `docs`
-service in compose that builds `maestro-cli/book/dist`, and its update
-command lists it, but `docker-compose.yml` has only `orq` and `view`.
-`reference/env.md` lists `VITE_DOCS_URL` and `use/page.md` a Docs link in
-the sidebar ("The sidebar has My runs, Queue, Usage and Docs"), and neither was ever in the view. `maestro docs --web` and the
-`/docs/` block for Caddy need a server that serves the book. Its owner
-decides whether the stack serves the book, and then either the service and
-the link are added or the book stops naming them.
+The book no longer names a docs service, since the stack doesn't serve the
+book. `maestro docs --web` still opens the server's `/docs`
+(`docsBase` in `cmd/docs.go`), and its help, its example and the hint shown
+without a browser still promise the copy the server serves. Its owner
+decides whether `--web` goes, with `MAESTRO_DOCS_URL` left for a copy
+somewhere else, or serves the book the CLI carries where another computer
+can reach it. Then the help, the example and the hint say what it does.
 
 ### S3. The root holds what it shouldn't
 
