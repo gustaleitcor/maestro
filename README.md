@@ -673,3 +673,5 @@ podman compose up --build -d
 
 The reverse proxy must send `/api/*` on the view's host to orq (port 3005),
 so that `OIDC_REDIRECT_URL` reaches it and the session cookie is first-party.
+The compose file publishes that port on 127.0.0.1 only, or on `ORQ_BIND`
+when it is set, so that nothing but the proxy reaches orq.

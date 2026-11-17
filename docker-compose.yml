@@ -31,8 +31,10 @@ services:
       OIDC_ADMIN_ROLES: ADMIN
       MACHINE_SECRET: ${MACHINE_SECRET}
       MACHINE_PROXY_COMMANDS: ${MACHINE_PROXY_COMMANDS:-false}
+    # Only the reverse proxy talks to orq, so the port is published on the
+    # loopback address unless ORQ_BIND says otherwise (see .env.example).
     ports:
-      - "3005:3005"
+      - "${ORQ_BIND:-127.0.0.1}:3005:3005"
 
   # builds maestro-view into ./maestro-view/dist and exits; Caddy serves that
   # directory directly, so no port/restart policy is needed here.
