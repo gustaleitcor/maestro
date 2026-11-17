@@ -20,7 +20,8 @@ every part:
   generator runs inside orq as WebAssembly with no access to the host.
 - Whatever keeps someone's data has a limit on how much. A line keeps at
   most `RUN_OUTPUT_MAX_MB`, a user keeps at most `images_per_user` images,
-  and a user's runs keep at most `USER_DATA_MAX_GB` in all.
+  and a user's runs keep at most `USER_DATA_MAX_GB` in all. A run that
+  isn't kept is deleted `run_retention_days` after its last line ended.
 - A secret is kept sealed or hashed, and is sent only where it is needed.
   Keys and sessions are stored as hashes. Machines' SSH keys are sealed with
   `MACHINE_SECRET`. A forge token is kept by the CLI, sent for one clone, and

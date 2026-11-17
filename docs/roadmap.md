@@ -9,17 +9,6 @@ why.
 
 ## For users
 
-### P7. Old runs expire
-
-orq deletes no run on its own. Add `run_retention_days` to `setting`,
-changed from Admin › Settings, 0 by default, which means never. A run whose
-last line ended more than that many days ago is deleted with its files, by
-the runner, once an hour, the way `container.Remove` deletes one. A user
-keeps a run with `maestro runs keep <run>` and lets it go again with
-`--off` (a migration adds `runs.kept`). `maestro runs` and the page show
-when a run expires, once that is within a week. Book: `admin/retention.md`,
-`admin/policies.md`, `use/runs.md`.
-
 ## For whoever runs a Maestro
 
 ### P9. One test goes through everything
