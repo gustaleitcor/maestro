@@ -65,16 +65,6 @@ when a run expires, once that is within a week. Book: `admin/retention.md`,
 
 ## For whoever runs a Maestro
 
-### P8. orq backs its database up
-
-Everything orq knows is one SQLite file. Add `DB_BACKUP_DIR` to `config`,
-off when empty, and `DB_BACKUPS_KEPT`, 7 by default. Once a day orq writes
-`maestro-orq-<date>.db` there with `VACUUM INTO`, which is safe while orq
-runs, and removes the oldest beyond the number kept. It goes in `db`.
-`docker-compose.yml` mounts a volume for it. Book: `reference/env.md`, and
-`admin/retention.md` with the steps to restore one and what a restore
-loses (the runs' files aren't in it).
-
 ### P9. One test goes through everything
 
 Add `dev/e2e.sh`, which against the development stack signs in through its
