@@ -13,26 +13,12 @@ the user queues and the machines: a buffer of `staged` lines for each group,
 filled by a select policy and emptied by an allocate policy. It was built by
 mistake. [The queues](queues.md) says what is meant.
 
-### Q8. The runs page draws a run of 5000 lines
-
-Do this before Q7. With a run of 5000 lines, `RunsDrive.vue` takes 2.4
-seconds to draw it, 1 to 3 seconds to sort it, and stalls for up to a
-second every time it polls an active run, every 5 seconds. Every row is
-drawn with `v-for`, and each poll replaces every line, so Vue patches all
-5000 rows. Draw only the rows in view, and have a poll change only the
-lines whose status changed. Behaviour and classes stay as they are. Done
-when a run of 5000 lines draws, sorts and polls in under 0.4 seconds each,
-as a run of 1000 does now, measured the same way.
-
 ### Q7. A run has at most 5000 lines
 
 `container.MaxLines` goes from 1000 to 5000. The book says 1000 in
 `repo/maestro-toml.md`, `repo/generator.md`, `reference/troubleshooting.md`
 and the glossary. `maestro-template`'s README says ten runs of a thousand
-are needed for 10 000 containers, which becomes two runs of 5000. Check
-that a run of 5000 lines is listed without a query per line
-(`container.List`, `Get`), and that `RunsDrive.vue` draws 5000 rows without
-freezing; if it does freeze, say so instead of raising the limit halfway.
+are needed for 10 000 containers, which becomes two runs of 5000.
 
 ## Text a user reads
 
