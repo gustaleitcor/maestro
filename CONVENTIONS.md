@@ -93,7 +93,7 @@ middleware can't disagree.
 
 | Package | Owns |
 | --- | --- |
-| `auth`, `session`, `key` | signing in, sessions, Maestro keys |
+| `auth`, `session` | signing in, sessions, Maestro keys |
 | `build` | cloning a repo and building it |
 | `image` | the built images in orq's Podman |
 | `container` | runs: queueing them, listing them, their logs and files; reading `maestro.toml` |

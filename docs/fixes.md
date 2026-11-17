@@ -13,23 +13,6 @@ the user queues and the machines: a buffer of `staged` lines for each group,
 filled by a select policy and emptied by an allocate policy. It was built by
 mistake. [The queues](queues.md) says what is meant.
 
-### Q4. The CLI
-
-`maestro queue`, `maestro settings`, `maestro runs show`, `maestro export`
-and `maestro help concepts` (`cmd/queue.go`, `settings.go`, `runs.go`,
-`export.go`, `concepts.go`, `internal/maestroapi`) show the three queues:
-no `staged`, the dispatcher policy where select and allocate were, and the
-number of heads in the dispatcher queue. An older server that still answers
-with `staged` is shown as it answers.
-
-### Q6. The book
-
-`how/queue.md`, `how/score.md`, `admin/policies.md`, `admin/groups.md`,
-`admin/sim.md`, `use/usage.md` (the export's columns), `use/runs.md`,
-`use/page.md`, `start/quickstart.md`, `admin/machines.md` and the glossary's
-statuses. The diagrams in `how/queue.md` are redrawn with three queues. Then
-`sh book/build.sh`.
-
 ### Q8. The runs page draws a run of 5000 lines
 
 Do this before Q7. With a run of 5000 lines, `RunsDrive.vue` takes 2.4
@@ -52,52 +35,6 @@ that a run of 5000 lines is listed without a query per line
 freezing; if it does freeze, say so instead of raising the limit halfway.
 
 ## Limits and secrets
-
-### K1. A key can be revoked
-
-`internal/db/queries/keys.sql` has no delete, and `maestro logout` only
-forgets the key on the user's computer.
-
-- orq: add queries that delete a key by its hash, by its user and prefix, and
-  all of a user's. Add to `auth.API`: `RevokeKey(ctx, userID, prefix)`, which
-  is `apierr.NotFound` when that user has no such key; `RevokeCurrentKey(ctx,
-  rawKey)`; `RevokeUserKeys(ctx, userID)`; and `ListKeys(ctx, userID)`.
-- Routes, in `internal/api/keys.go`: `GET /api/keys` and
-  `DELETE /api/keys/:prefix` for a session or a key, `DELETE
-  /api/keys/current` for a key, and `DELETE /api/admin/users/:id/keys` for
-  an administrator.
-- CLI: `maestro logout` calls `DELETE /api/keys/current` before it forgets.
-  If the server can't be reached it says the key is still valid there, and
-  forgets it anyway. Add `maestro keys` (lists the prefix of each key and
-  when it was created, with `--json`) and `maestro keys rm <prefix>` (asks
-  first, `--yes`), in a new `cmd/keys.go`.
-- Page: in `GroupsAdmin.vue`, each user gets a "Revoke keys" button that
-  asks before it calls the administrator's route.
-- Book: `use/login.md`, `admin/identity.md`, the glossary.
-- Done when a test in `auth` shows a revoked key is refused by
-  `RequireMaestroKey` and by `/api/keys/verify`, and a test in `cmd` shows
-  `maestro logout` calls the route.
-
-### K2. The middleware asks `auth`
-
-`middleware.RequireMaestroKey` reads the key from the database itself, and
-`auth.VerifyKey` does the same apart from it. Give `auth.API` one method that
-takes a raw key and returns its user or an `apierr.Unauthorized`, and have
-both the middleware and `VerifyKey` use it. `internal/key` is then used only
-by `auth`: move its two functions into `internal/auth/keys.go`, with the key
-methods of K1, and delete the package. Done when `middleware` no longer
-imports `key`, and no longer queries keys.
-
-### K3. A key expires
-
-Add `KEY_TTL` to `config` (a duration, default `2160h`, 90 days; `0` means
-never). The method from K2 refuses a key whose `created_at` is older, with
-"this Maestro key expired; run `maestro login`". `GET /api/keys` and
-`maestro keys` show when each key expires. Book: `reference/env.md`,
-`use/login.md`, `reference/troubleshooting.md`. Done when a test shows a key
-older than the TTL is refused and one with `KEY_TTL=0` isn't. Say in the
-commit message that keys older than 90 days stop working when this is
-deployed.
 
 ### B1. A build has memory and CPU limits, and a user builds two at once
 
