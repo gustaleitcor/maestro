@@ -15,10 +15,12 @@ mistake. [The queues](queues.md) says what is meant.
 
 ### Q7. A run has at most 5000 lines
 
-`container.MaxLines` goes from 1000 to 5000. The book says 1000 in
-`repo/maestro-toml.md`, `repo/generator.md`, `reference/troubleshooting.md`
-and the glossary. `maestro-template`'s README says ten runs of a thousand
-are needed for 10 000 containers, which becomes two runs of 5000.
+orq and the book allow 5000 lines. What is left is `maestro-template`'s
+README on its `stress` branch, which still says a run has at most 1000
+lines (line 13, "which makes 1000, a run's most") and that 10 000
+containers are ten runs of a thousand (lines 48 and 54). Its owner decides
+whether `genvrs.py` makes 5000 lines, so that two runs make 10 000, or keeps
+1000 and the README only stops calling 1000 a run's most.
 
 ## Text a user reads
 
