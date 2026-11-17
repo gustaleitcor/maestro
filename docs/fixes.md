@@ -13,65 +13,6 @@ the user queues and the machines: a buffer of `staged` lines for each group,
 filled by a select policy and emptied by an allocate policy. It was built by
 mistake. [The queues](queues.md) says what is meant.
 
-### Q1. `sched` has three queues
-
-In `maestro-orq/internal/sched`:
-
-- `Config` and `Policies` lose `Select`, `Allocate` and `StagedCapacity`
-  and gain `Dispatcher` (JSON `dispatcher`): fifo, lcfs, siro or pq, FIFO by
-  default. Saved settings that still have `select` are read with it as the
-  dispatcher, so that an administrator's PQ isn't lost. `allocate` and
-  `staged_capacity` in saved settings are ignored.
-- `Snapshot` loses `Staged`, `Task` loses `Staged`, and the status `Staged`
-  goes. The moves left are queued to assigned, assigned to starting, and
-  assigned back to queued for a line whose machine would no longer hold it.
-- `Step` drops selection. Its dispatch step gives the groups turns, as
-  allocation does now. In a group's turn the candidates are the heads of
-  its users: for each user, the line the user policy picks among their
-  queued lines that some machine would hold. A head with no machine that
-  has room in its queue isn't a candidate this turn, and its user's other
-  lines don't go in its place. The dispatcher policy picks one candidate,
-  and the machine is drawn as now. After each line dispatched, its need is
-  added to its user's share and the shares are worked out again, as
-  `selectIn` does now, so that PQ with a share weight takes users in turn.
-- Shares count what a user's lines take once assigned, starting or running.
-- Promotion on the machines stays as it is.
-- Done when `step_test.go` shows: a user with ten lines and a user with one
-  each have one head; no user has two lines dispatched in a turn while
-  another user's head has room; a group with no head that has room passes
-  its turn; a line no machine holds blocks no one.
-
-### Q2. The score divides by the sum
-
-`Context.Largest` becomes `Context.Cluster`, set from the state's `cluster`
-(what every known machine that isn't down has for lines, summed).
-`Score.Of` divides a line's cores and memory by it. Tetris keeps
-`Context.Whole`. Done when a test in `policy_test.go` shows a line's term
-with two machines of 8 cores is its cores over 16, not over 8. Say in the
-commit message that the cores and memory weights now multiply smaller
-numbers, so saved weights weigh less than they did.
-
-### Q3. orq around `sched`
-
-- A migration sends lines `staged` back to `queued` and drops
-  `run_lines.staged_at`. Queries that name `staged` lose it
-  (`internal/db/queries/runs.sql`, `groups.sql`); `StageLine` goes.
-- The scheduler's settings, and the group a line's user was in, are recorded
-  when a line is assigned, where they were recorded when it was staged.
-- `runner` (`schedule.go`, `runner.go`: `Waiting`, `Active`, `unstart`,
-  the statuses) and `simulate` follow the new moves. A line sent back from a
-  machine goes to `queued`.
-- `container/queue.go` and `api/queue.go`: the queue reports, for each group
-  and for the caller, how many lines are queued, how many of those are heads
-  (the dispatcher queue), and how many are assigned. `api/settings.go` and
-  `api/runs.go` lose the staged fields and gain `dispatcher`.
-- The export and `evaluation` lose the staged time. A file exported before
-  this, with that column, is still read.
-- `cmd/sim` takes `-dispatcher` where it took the two policies.
-- Run `sqlc generate` and `swag init`. Done when `go build ./... && go vet
-  ./... && go test ./...` pass and `grep -ri staged internal cmd` finds only
-  old migrations and the reading of old exports and settings.
-
 ### Q4. The CLI
 
 `maestro queue`, `maestro settings`, `maestro runs show`, `maestro export`
