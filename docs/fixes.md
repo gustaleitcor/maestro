@@ -223,19 +223,6 @@ In `main.go`, replace `router.Run` with an `http.Server` that has a
 
 ## Building and deploying
 
-### C1. Each repository tests itself
-
-Add `.github/workflows/test.yml` to `maestro-orq` and `maestro-cli` (set up
-Go from `go.mod`, then build, vet and test) and to `maestro-view` (`npm ci`,
-`npm run build`).
-
-### V1. The view's image installs from the lock file
-
-Its `Dockerfile` copies only `package.json` and runs `bun install`, so
-`package-lock.json` is ignored. Build on a Node LTS image: copy both files,
-`npm ci`, then `npm run build`. `serve.ts` and the `serve` script use bun:
-keep them only if something still runs them, and say what in the README.
-
 ### D1. SQLite in WAL mode
 
 In `main.go`, open the database with `_pragma=journal_mode(WAL)` and
@@ -243,14 +230,6 @@ In `main.go`, open the database with `_pragma=journal_mode(WAL)` and
 `*.db-shm` to orq's `.gitignore`. Book: `admin/retention.md`, on backing the
 database up. Don't turn `foreign_keys` on: the deletes in `container.Remove`
 and `group` were never run with it, and that needs its own change and tests.
-
-### D2. orq's production image is slim
-
-The `prod` stage is the Go image with the whole source. Build the binary in
-a stage, then copy it, with `cloudflared`, into `debian:bookworm-slim` with
-`git`, `tini` and `ca-certificates` installed. orq runs `git` and `sh`, so
-both must be there. Done when `podman build --target prod` works and the
-image starts.
 
 ### D3. The book says how rootless Podman keeps running
 
