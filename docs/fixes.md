@@ -57,12 +57,6 @@ else: no flag is renamed, and no fact is added or dropped. Known cases:
 Run `sh book/build.sh` in each commit, and fix the tests that quote the old
 text.
 
-### T2. orq's messages
-
-The same pass over every `apierr.…(` message and every `response.Fail`
-fallback in `maestro-orq/internal`, and over what a build writes to its log
-(`build.Create`). One commit.
-
 ### T3. The Maestro page's text
 
 The same pass over every component in `maestro-view/src`, one commit per
