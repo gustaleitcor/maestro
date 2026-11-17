@@ -34,15 +34,6 @@ the messages set in the script. Known cases:
   `SettingsAdmin.vue`;
 - "Open in new tab, drawn", which doesn't say what it does.
 
-### T4. What T1 and T2 left
-
-The same pass over the text they didn't cover, one commit per repository:
-the views in `maestro-cli/tui` (`welcome.go`, `init.go`, `top.go`,
-`repolist.go`), where bare `maestro` still ends with "maestro --help for
-more information"; the three messages `middleware` writes itself ("login
-required", "sessions are unavailable", "only administrators can do this");
-and `use/login.md`, which calls the user's computer "a machine".
-
 ## Structure
 
 ### S1. The READMEs point to the book
