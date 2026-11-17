@@ -7,8 +7,6 @@ it. Each says where its code goes; [CONVENTIONS.md](../CONVENTIONS.md) and
 the files beside this one hold for it as for any change. If an item can't be done as written, stop and say
 why.
 
-## For users
-
 ## For whoever runs a Maestro
 
 ### P9. One test goes through everything

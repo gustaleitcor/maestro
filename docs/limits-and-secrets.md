@@ -16,8 +16,8 @@ every part:
   processes. A line's container has all four. A build has a time limit
   (`BUILD_TIMEOUT`), and a user builds a few at once (`BUILDS_AT_ONCE`).
   Rootless Podman ignores memory and CPU limits on a build, so a build has
-  none. A
-  generator runs inside orq as WebAssembly with no access to the host.
+  none. A generator runs inside orq as WebAssembly with no access to the
+  host.
 - Whatever keeps someone's data has a limit on how much. A line keeps at
   most `RUN_OUTPUT_MAX_MB`, a user keeps at most `images_per_user` images,
   and a user's runs keep at most `USER_DATA_MAX_GB` in all. A run that
