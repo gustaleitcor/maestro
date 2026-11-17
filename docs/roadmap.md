@@ -7,8 +7,6 @@ it. Each says where its code goes; [CONVENTIONS.md](../CONVENTIONS.md) and
 the files beside this one hold for it as for any change. If an item can't be done as written, stop and say
 why.
 
-## For the thesis
-
 ## For users
 
 ### P7. Old runs expire
