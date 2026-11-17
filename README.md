@@ -20,6 +20,9 @@ and `maestro docs` opens it offline.
 - `docker-compose.yml`: the production stack
 - `docker-compose-dev.yml`: the development stack, with its own throwaway
   identity provider (Dex, set up by `dev/dex.yaml`) and Valkey
+- `dev/e2e.sh`: a test that goes through everything against the development
+  stack, from signing in to downloading a run's files (see the book's
+  Contributing page)
 - `.env.example`: what the production stack needs set, with a line on each
 - `CONVENTIONS.md`: where code goes in each repository. Read it before you
   add a file.

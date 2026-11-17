@@ -9,16 +9,6 @@ why.
 
 ## For whoever runs a Maestro
 
-### P9. One test goes through everything
-
-Add `dev/e2e.sh`, which against the development stack signs in through its
-identity provider, approves a `maestro login`, adds the host as a machine,
-builds the public template, runs it, downloads the result with
-`maestro runs get` and checks a file it expects. It leaves the stack as it
-found it. If signing in can't be scripted against the development
-provider, stop and say so instead of adding a way around signing in. Book:
-`contributing.md`.
-
 ### P10. GPUs are a resource
 
 `maestro top` shows a machine's GPUs, but a line can't ask for one and the
