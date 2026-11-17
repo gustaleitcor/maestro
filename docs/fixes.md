@@ -48,19 +48,6 @@ already have 2 builds running; wait for one to end". Check with
 ignores the option, say so and leave the limit out instead of documenting one
 that does nothing. Book: `reference/env.md`, `use/builds.md`.
 
-### B2. Redis has a password
-
-In `.env.example`, show `REDIS_URL` with a password and say how to set one on
-the server. In `main.go`, when `MODE` isn't `dev` and `REDIS_URL` has no
-password, log one line at start saying that sessions can be forged by
-anything that reaches Redis. Book: `admin/deploy.md`, which says that Redis
-is given a password, is not published beyond the host, and that a Redis
-shared with other services gets the same care from each of them.
-
-The Redis itself is not Maestro's to change: on the production server it is
-a container of another compose project, shared with other services. Its
-owner sets the password there, and then `REDIS_URL` here.
-
 ### L1. A line has a longest running time
 
 Add `RUN_MAX_HOURS` to `config.RunLimits` (default 168, a week; `0` means no
@@ -80,45 +67,7 @@ method to `runner.Data` that sums the files under a user's directory.
 with `maestro runs rm <run>`". Book: `reference/env.md`,
 `admin/retention.md`.
 
-### N1. orq listens on the loopback address
-
-In `docker-compose.yml`, the port becomes
-`"${ORQ_BIND:-127.0.0.1}:3005:3005"`, with `ORQ_BIND` explained in
-`.env.example`. Book: `admin/deploy.md`, which also says that the host needs
-a firewall letting in only SSH and what the reverse proxy listens on.
-
-Don't deploy this without its owner. On the production server the reverse
-proxy is a container of another compose project, and reaches orq at
-`host.containers.internal:3005`, the gateway of Podman's bridge. Whether a
-port published on the loopback address still answers there has to be tried
-on that server. If it doesn't, `ORQ_BIND` is set there to what does, or the
-proxy and orq are put on one Podman network and the port isn't published.
-
-### N2. The swagger pages need a session
-
-In `router.go`, register `/swagger/*any` behind `authMW` unless `cfg.Dev`.
-
-### N3. The HTTP server has timeouts
-
-In `main.go`, replace `router.Run` with an `http.Server` that has a
-`ReadHeaderTimeout` of 10 seconds and an `IdleTimeout` of 2 minutes, and no
-`ReadTimeout` or `WriteTimeout`.
-
 ## Building and deploying
-
-### D1. SQLite in WAL mode
-
-In `main.go`, open the database with `_pragma=journal_mode(WAL)` and
-`_pragma=synchronous(NORMAL)` beside the busy timeout. Add `*.db-wal` and
-`*.db-shm` to orq's `.gitignore`. Book: `admin/retention.md`, on backing the
-database up. Don't turn `foreign_keys` on: the deletes in `container.Remove`
-and `group` were never run with it, and that needs its own change and tests.
-
-### D3. The book says how rootless Podman keeps running
-
-Add to `admin/deploy.md`: the user whose Podman runs Maestro needs lingering
-(`loginctl enable-linger <user>`), or its containers stop when that user's
-last session ends. The production server has it off.
 
 ## Text a user reads
 
