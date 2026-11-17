@@ -34,41 +34,6 @@ that a run of 5000 lines is listed without a query per line
 (`container.List`, `Get`), and that `RunsDrive.vue` draws 5000 rows without
 freezing; if it does freeze, say so instead of raising the limit halfway.
 
-## Limits and secrets
-
-### B1. A build has memory and CPU limits, and a user builds two at once
-
-`podman.Build` passes neither limit. Add `BUILD_MEMORY_MB` (default 4096) and
-`BUILD_CPUS` (default 2) to `config`, and pass them in
-`client.ImageBuildOptions` (`Memory`, `CPUPeriod`, `CPUQuota`). Add
-`BUILDS_AT_ONCE` (default 2): `build.reserve` already counts a user's running
-builds, and now refuses one over the limit with `apierr.Conflict`: "you
-already have 2 builds running; wait for one to end". Check with
-`podman/live_test.go` that Podman holds a build to the memory limit. If it
-ignores the option, say so and leave the limit out instead of documenting one
-that does nothing. Book: `reference/env.md`, `use/builds.md`.
-
-### L1. A line has a longest running time
-
-Add `RUN_MAX_HOURS` to `config.RunLimits` (default 168, a week; `0` means no
-limit). In `runner.check`, a running line whose `started_at` is older is
-stopped the way a cancelled one is: its logs and outputs are collected, and
-it ends as `error` with the note "stopped after 168 hours, the longest a line
-may run on this server". Book: `reference/env.md`, `use/runs.md`, the
-glossary's statuses. Done when a test in `runner` shows which lines are over
-the limit (a pure function, as `ended` is).
-
-### L2. A user's runs keep a limited amount
-
-Add `USER_DATA_MAX_GB` to `config.RunLimits` (default 0, no limit). Add a
-method to `runner.Data` that sums the files under a user's directory.
-`container.Create` refuses a new run once the user is at the limit, with
-`apierr.Conflict`: "your runs keep 52 GB of the 50 GB allowed; delete one
-with `maestro runs rm <run>`". Book: `reference/env.md`,
-`admin/retention.md`.
-
-## Building and deploying
-
 ## Text a user reads
 
 ### T1. The CLI's help, in the book's voice
