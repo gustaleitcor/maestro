@@ -667,7 +667,7 @@ completion still costs one request to orq.
 ## Production
 
 ```sh
-cp .env.example .env   # fill in OIDC_CLIENT_SECRET and MACHINE_SECRET
+cp .env.example .env   # fill in OIDC_CLIENT_SECRET, MACHINE_SECRET and REDIS_URL's password
 podman compose up --build -d
 ```
 
