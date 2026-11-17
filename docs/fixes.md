@@ -38,21 +38,22 @@ the messages set in the script. Known cases:
 
 ## Structure
 
-### S1. The READMEs point to the book
-
-The root `README.md` holds over 600 lines of behaviour that the book now
-covers, and the two are kept true by hand. For each section of the root
-README, find the page of the book that says the same thing. If the book
-lacks something, add it to the book. Then cut the README down to what
-Maestro is, the layout, getting started, and production, each with a link to
-the book's page. Do the same for `maestro-view/README.md`. One commit per
-README, after the text of that part is done (T1 to T3).
-
 ### S2. The runs page is one component of 1170 lines
 
 Take the pieces of `RunsDrive.vue` out into components of their own, one
 commit each: the list of runs, one run's lines, and the bar of filters and
 search. Behaviour and classes stay as they are.
+
+### S4. The book's docs service
+
+The book says what the stack doesn't have. `admin/deploy.md` names a `docs`
+service in compose that builds `maestro-cli/book/dist`, and its update
+command lists it, but `docker-compose.yml` has only `orq` and `view`.
+`reference/env.md` lists `VITE_DOCS_URL` and `use/page.md` a Docs link in
+the sidebar, and neither was ever in the view. `maestro docs --web` and the
+`/docs/` block for Caddy need a server that serves the book. Its owner
+decides whether the stack serves the book, and then either the service and
+the link are added or the book stops naming them.
 
 ### S3. The root holds what it shouldn't
 
