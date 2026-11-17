@@ -22,12 +22,6 @@ no `staged`, the dispatcher policy where select and allocate were, and the
 number of heads in the dispatcher queue. An older server that still answers
 with `staged` is shown as it answers.
 
-### Q5. The Maestro page
-
-`QueuePanel.vue`, `SettingsAdmin.vue` (one dispatcher policy, no staging
-capacity), `LineDetails.vue` and `RunsDrive.vue` (a line's timeline and
-status), `LinesReport.vue` and `GroupsAdmin.vue`.
-
 ### Q6. The book
 
 `how/queue.md`, `how/score.md`, `admin/policies.md`, `admin/groups.md`,
@@ -35,6 +29,17 @@ status), `LinesReport.vue` and `GroupsAdmin.vue`.
 `use/page.md`, `start/quickstart.md`, `admin/machines.md` and the glossary's
 statuses. The diagrams in `how/queue.md` are redrawn with three queues. Then
 `sh book/build.sh`.
+
+### Q8. The runs page draws a run of 5000 lines
+
+Do this before Q7. With a run of 5000 lines, `RunsDrive.vue` takes 2.4
+seconds to draw it, 1 to 3 seconds to sort it, and stalls for up to a
+second every time it polls an active run, every 5 seconds. Every row is
+drawn with `v-for`, and each poll replaces every line, so Vue patches all
+5000 rows. Draw only the rows in view, and have a poll change only the
+lines whose status changed. Behaviour and classes stay as they are. Done
+when a run of 5000 lines draws, sorts and polls in under 0.4 seconds each,
+as a run of 1000 does now, measured the same way.
 
 ### Q7. A run has at most 5000 lines
 
