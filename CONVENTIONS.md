@@ -105,6 +105,7 @@ middleware can't disagree.
 | `machine` | machines and the SSH connection to them |
 | `metrics` | how loaded the machines are |
 | `setting` | what an administrator changes from the Maestro page |
+| `audit` | what administrators changed, and who: written by each resource's service, in the same transaction as the change |
 | `config` | what whoever deploys orq sets in its environment |
 | `podman`, `gitclone`, `python` | the programs orq drives; `python` is inside orq, as WebAssembly, for the scripts of others |
 | `cache`, `kv` | Redis: what is remembered for a while |

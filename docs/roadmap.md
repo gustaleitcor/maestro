@@ -29,15 +29,3 @@ change with a third resource. What it will touch, for whoever plans it:
 `sched.Resources`, a machine's capacity (`machine`, `metrics`), `gpus` in
 `maestro.toml`, how Podman is given a device (`podman.CreateContainer`),
 usage and the export.
-
-### P13. What administrators change is written down
-
-Nothing records who changed the scheduler's settings, moved a user, edited
-a machine or revoked keys, or when. Add a table of administrators' actions
-(who, when, what, and the old and new values as JSON), written by the
-service that makes each change, in the same transaction where there is one.
-It is a new package, `audit`, because it belongs to no resource: every
-resource writes to it. `GET /api/admin/actions`, newest first, and a
-History section in the page's Admin. The export gains nothing, but a
-period measured for the thesis can be cut where the settings changed.
-Book: `admin/policies.md`.
