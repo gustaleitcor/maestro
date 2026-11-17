@@ -13,15 +13,6 @@ the user queues and the machines: a buffer of `staged` lines for each group,
 filled by a select policy and emptied by an allocate policy. It was built by
 mistake. [The queues](queues.md) says what is meant.
 
-### Q7. A run has at most 5000 lines
-
-orq and the book allow 5000 lines. What is left is `maestro-template`'s
-README on its `stress` branch, which still says a run has at most 1000
-lines (line 13, "which makes 1000, a run's most") and that 10 000
-containers are ten runs of a thousand (lines 48 and 54). Its owner decides
-whether `genvrs.py` makes 5000 lines, so that two runs make 10 000, or keeps
-1000 and the README only stops calling 1000 a run's most.
-
 ## Structure
 
 ### S4. The book's docs service
@@ -37,8 +28,8 @@ the link are added or the book stops naming them.
 
 ### S3. The root holds what it shouldn't
 
-`plano.md` is the plan of the queues, and describes the four levels that
-[The queues](queues.md) replaces. Once Q1 to Q6 are done the book's
-`how/queue.md` says how they work. Delete it once its owner agrees. `Maestro.html`
-(5.6 MB, untracked) and the worktree at `.claude/worktrees/docs-book` are
-the owner's to remove: ask, don't delete.
+The worktree at `.claude/worktrees/docs-book` (branch
+`worktree-docs-book`) holds two commits that `main` doesn't: the book's
+first home in root, with a `docs` service in compose. The book has since
+moved to `maestro-cli`, and S4 drops the `docs` service, so they are likely
+not wanted. Its owner removes it.
