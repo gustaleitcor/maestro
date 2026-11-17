@@ -7,6 +7,8 @@ services:
     restart: unless-stopped
     volumes:
       - maestro-orq-data:/data:Z
+      # A copy of the database each day, the 7 newest kept
+      - maestro-orq-backups:/backups:Z
       # What runs leave behind: <user>/<run>/<line>/<file>
       - maestro-orq-runs:/maestro/data:Z
       - ${XDG_RUNTIME_DIR}/podman/podman.sock:/run/podman/podman.sock
@@ -14,6 +16,7 @@ services:
       MODE: prod
       MAESTRO_ORQ_ADDR: :3005
       MAESTRO_ORQ_DB: /data/maestro-orq.db
+      DB_BACKUP_DIR: /backups
       ALLOWED_ORIGINS: https://maestro.logsad.com
       PODMAN_SOCKET: unix:///run/podman/podman.sock
       BUILD_TIMEOUT: 30m
@@ -50,4 +53,5 @@ services:
 
 volumes:
   maestro-orq-data:
+  maestro-orq-backups:
   maestro-orq-runs:
