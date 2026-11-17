@@ -6,13 +6,6 @@ its own, in the order given within its group. An item is
 removed from this list in the commit that finishes it. If an item can't be
 done as written, stop and say why instead of doing something near it.
 
-## The queues
-
-These come first, and in this order. The code has a fourth level between
-the user queues and the machines: a buffer of `staged` lines for each group,
-filled by a select policy and emptied by an allocate policy. It was built by
-mistake. [The queues](queues.md) says what is meant.
-
 ## Structure
 
 ### S4. The book's docs service
