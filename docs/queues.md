@@ -24,6 +24,14 @@ A line that no machine would hold, even empty, is never a head and holds
 back no one. A user's share counts their lines assigned, starting and
 running.
 
+A user may hold at most `user_max_cpus` cores, an administrator's setting
+that the snapshot carries; 0 means no ceiling. What they hold is what their
+share counts: their lines assigned, starting and running, and not those
+queued. In a group's turn, a user's head is not a candidate while its cores,
+with what the user holds, would be over the ceiling, and the other users'
+heads go as usual. It stays the user's head, and their next line doesn't
+take its place.
+
 In the score, a line's cores and memory are each divided by what every
 machine has for lines, summed: capacity less what is kept back, over the
 machines orq knows and can reach. That is the total users' shares are
